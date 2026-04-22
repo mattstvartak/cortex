@@ -4,19 +4,36 @@ Canonical build order and current state. Update after every meaningful session.
 
 ## Current Phase
 
-**Nine MCP tools live.** `list_projects`, `get_project_context`,
-`catch_me_up`, `catch_me_up_on_meeting`, `my_action_items`,
-`upcoming_briefs`, `research`, `list_unclassified`, `todays_digest`.
-Twelve source adapters + five pipelines (doc, meeting, code,
-conversation, research). LLM classifier fallback on every adapter.
-Cron scheduler drives ingestion inside `cortex start`. 165 tests.
+**Sprint B (module wizards) complete.** Every adapter, every LLM
+provider, the pgvector memory backend, and the webhooks receiver has a
+declarative `WizardModule` spec (ADR-014). The generic CLI runner walks
+any spec via @inquirer/prompts and the category-aware config-mutation
+service routes writes to the right YAML section. Google adapters share
+a single `cortex google-login` OAuth loopback; the three adapter wizards
+pre-flight the refresh token before running.
 
-The user-visible surface from the original ROADMAP is done. Remaining
-work is optional infrastructure: Engram upstream `reference`
-cognitive layer (ADR-002), web retrieval (`@cortex/adapter-web`) for
-research, webhook-based real-time triggers in place of polling for
-adapters with `supportsWebhooks`, and a write-back story for manual
-re-classification from the review queue.
+**Surface area:** nine MCP tools live (`list_projects`,
+`get_project_context`, `catch_me_up`, `catch_me_up_on_meeting`,
+`my_action_items`, `upcoming_briefs`, `research`, `list_unclassified`,
+`todays_digest`). Twelve source adapters + five pipelines (doc,
+meeting, code, conversation, research). LLM classifier fallback on
+every adapter. Cron scheduler drives ingestion inside `cortex start`.
+Push-based ingestion via `stream()` (Obsidian chokidar) and
+`webhook()` (GitHub + Slack) per ADR-013. Native Postgres + pgvector
+fallback for Engram per ADR-012. Docker + HTTP MCP transport optional.
+~100 server tests, plus adapter/provider/pipeline tests across the
+workspace.
+
+Remaining work splits into:
+- **Sprint C (dashboard)** — Next.js 15 app consuming the same wizard
+  specs as web forms, plus a widget-based customizable dashboard
+  (priorities, meetings, action items, activity, decisions,
+  who-knows). Role presets for dev/manager/PM. Not started.
+- **Step 0b (federation)** — `@cortex/memory-remote` for hybrid
+  personal-local + shared-team Engram.
+- **Upstream** — Engram `reference` cognitive layer (ADR-002), live
+  Confluence smoke against real Atlassian, live Google OAuth smoke
+  against a real consent screen.
 
 ## Phase 0: Setup (manual, pre-development)
 
@@ -264,3 +281,38 @@ Record a one-line summary after each Claude Code session.
   →markdown, databases+pages). @cortex/adapter-obsidian (filesystem
   walk, YAML frontmatter parser, path-prefix classifier with frontmatter
   override). All reuse pipeline-doc. 71 tests total.
+- 2026-04-22: Native Postgres fallback (ADR-012). @cortex/memory-pgvector
+  with HNSW + tsvector GIN fused via RRF; 18 unit tests mocking pg.
+  Memory-backend factory picks engram by default, flips to pgvector when
+  the primary health check fails.
+- 2026-04-22: Push-based ingestion (ADR-013). stream() + webhook() on
+  SourceAdapter; Obsidian chokidar watcher and GitHub webhooks ship as
+  pilots. Single processItem() helper keeps cron/stream/webhook paths
+  identical downstream.
+- 2026-04-22: Docker + HTTP MCP transport. Multi-stage Dockerfile,
+  compose with Engram + Persona sidecars, CORTEX_MCP_TRANSPORT=stdio|http
+  flag via StreamableHTTPServerTransport.
+- 2026-04-22: PII hygiene foundation. docs/PRIVACY.md, .local.yaml
+  override pattern for identifier-bearing config, grep-based
+  pre-commit identifier scanner with allow-list, Node-based
+  install-hooks.mjs that works on Windows/Mac/Linux without bash on
+  PATH. Cross-platform docs pass across README and SETUP.md.
+- 2026-04-22: Sprint A — wizard framework. WizardModule interface in
+  @cortex/core; CLI runner via @inquirer/prompts in @onenomad/cortex;
+  atomic multi-file config-mutation service (cortex.local.yaml + .env
+  + projects.local.yaml). First real wizard: @cortex/adapter-confluence
+  with engagement/sub-brand/project/team context tuples.
+- 2026-04-22: Sprint B — every module gets a wizard. Jira + Linear +
+  Notion + Loom + Obsidian + GitHub + Bitbucket + Slack adapters; Ollama
+  and OpenRouter providers; pgvector memory; webhooks receiver. Gmail
+  + Google Calendar + Google Drive via a shared `cortex google-login`
+  OAuth loopback. Category-aware config-mutation (ADR-014) routes
+  writes to the right YAML section. Registry pin test catches
+  regressions. 97 server tests + 3 google-auth tests green.
+- 2026-04-22: Engram hooks redesigned (sibling repo, beta.10).
+  engram_precompact_hook.sh auto-extracts a handoff from the Claude
+  Code transcript and approves in one pass — no more block-then-approve
+  loop. engram_stop_hook.sh writes a rolling session-checkpoint.json
+  every turn so there's always a fresh lifeline on disk even if
+  /compact never runs. readHandoff prefers timestamped handoffs over
+  the rolling checkpoint.

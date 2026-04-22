@@ -461,6 +461,74 @@ how the item arrived.
   spoofable and silently running in that state is worse than failing
   loud.
 
+## ADR-014: Declarative module wizards + category-aware config writes (2026-04-22)
+
+**Status**: Accepted
+
+**Context**: Every source adapter, LLM provider, memory backend, and the
+webhook receiver needs the same tedious plumbing: ask the operator for
+configuration, validate it, write adapter settings to
+`config/cortex.local.yaml`, secrets to `.env`, and any derived projects
+to `config/projects.local.yaml`. First pass had that logic split across
+ad-hoc `README` snippets and one-off CLI subcommands, which scaled
+poorly — every new adapter wanted its own wizard and the team cost of
+"write a good setup flow" was pushing some modules out of reach.
+
+A second force: the dashboard (Sprint C) needs the same flows, but as
+web forms. Duplicating each prompt in a React component would immediately
+drift from the CLI version.
+
+**Decision**: Two pieces, one source of truth:
+
+- **`WizardModule` — declarative spec in `@cortex/core/wizard`.** Each
+  module exports a `WizardModule` describing its steps, secrets,
+  category, and an optional `derivedTaxonomy` hook. Step kinds are a
+  closed enum (`text`, `password`, `boolean`, `select`, `list`,
+  `repeat-per`, `record`) that any renderer can handle without
+  framework coupling — no React, no inquirer leaking into the spec.
+- **Category-aware `config-mutation.applyWizardResult`.** The runner
+  attaches the module's category (`adapter` | `provider` | `memory` |
+  `toolkit` | `webhook`) to the `WizardResult`, and the mutation
+  service branches on it:
+
+  | category | lands at |
+  |---|---|
+  | adapter | `adapters.<id> = { package, enabled, config }` |
+  | provider | `llm.providers.<id> = { package, enabled, config }` |
+  | memory | `memory.<id> = config` (+ `memory.fallback = <id>`) |
+  | webhook | `webhooks = { ...webhooks, ...config }` |
+  | toolkit | `toolkits.<id> = config` |
+
+  All writes go through the same atomic tmp-then-rename path;
+  `.env` merges dedupe by key; `projects.local.yaml` merges dedupe by
+  slug. One generic pipe from every wizard shape.
+
+**Consequences**:
+- Adding a new module becomes: "write one wizard.ts, register it once."
+  Every adapter, provider, memory backend, and the webhooks receiver
+  now have wizards with the same shape and coverage.
+- The CLI runner (`@inquirer/prompts`) and future dashboard form
+  renderer consume the same specs. Any step type both renderers
+  understand is covered everywhere for free.
+- Shared Atlassian credentials across Confluence / Jira / Bitbucket
+  fall out of the `.env`-merge semantics — re-entering the token
+  during a second wizard run is a no-op instead of a duplicate.
+- Zod schemas that use `.default()` / `.preprocess()` need a
+  `z.ZodTypeAny` typing on the spec's `configSchema` field because
+  preprocessing diverges input and output types. Runtime parsing still
+  enforces the concrete `TConfig`.
+- Google adapters (gmail, google-calendar, google-drive) don't fit the
+  step model — they need an OAuth loopback handshake instead of
+  prompts. Those are a sidecar: `cortex google-login` runs the
+  interactive OAuth flow and writes a shared refresh token; the three
+  adapter wizards stay declarative, collect adapter-specific config
+  only, and the CLI pre-flights the token before the wizard runs.
+- Obsidian's `pathToProject` is an *ordered* array of `{prefix,
+  project}` rather than a flat record. The wizard collects a list of
+  prefixes, a per-prefix project via `repeat-per`, and a
+  `z.preprocess()` rebuilds the ordered array from insertion order.
+  Future adapters that need ordered mappings follow the same pattern.
+
 ---
 
 _Add new ADRs below this line._
