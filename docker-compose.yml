@@ -1,0 +1,48 @@
+services:
+  engram:
+    image: engram:local
+    build:
+      context: ../engram
+    ports:
+      - "3101:3101"
+    environment:
+      - MCP_PORT=3101
+    volumes:
+      - engram-data:/data
+    restart: unless-stopped
+
+  persona:
+    image: persona:local
+    build:
+      context: ../persona
+    ports:
+      - "3102:3102"
+    environment:
+      - MCP_PORT=3102
+    volumes:
+      - persona-data:/data
+    restart: unless-stopped
+
+  cortex:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=development
+      - ENGRAM_MCP_URL=http://engram:3101
+      - PERSONA_MCP_URL=http://persona:3102
+      - CORTEX_MCP_PORT=3100
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      - engram
+      - persona
+    restart: unless-stopped
+
+volumes:
+  engram-data:
+  persona-data:

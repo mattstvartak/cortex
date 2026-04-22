@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+.env.bak.*
+*.pem
+*.key
+credentials.json
+credentials/
+
+# Wizard backups
+**/*.bak.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# IDE and OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+
+# Turborepo / Nx (if added later)
+.turbo/
+.nx/
+
+# Local-only Claude state
+.claude/settings.local.json
+
+# Runtime data
+tmp/
+.cache/

@@ -1,0 +1,9 @@
+# People taxonomy. Used for attendee matching and meeting classification.
+# Changes require a server restart.
+
+people: []
+  # - slug: matt
+  #   name: "Matt Stvartak"
+  #   email: hello@mattstvartak.com
+  #   projects: []
+  #   role: "Engineering"

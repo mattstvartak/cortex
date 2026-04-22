@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../adapter-sdk" },
+    { "path": "../llm-core" },
+    { "path": "../llm-sdk" },
+    { "path": "../pipeline-core" },
+    { "path": "../provider-ollama" },
+    { "path": "../provider-openrouter" }
+  ]
+}

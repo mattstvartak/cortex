@@ -1,0 +1,394 @@
+import path from "node:path";
+import {
+  checkbox,
+  confirm,
+  input,
+  password,
+  select,
+} from "@inquirer/prompts";
+import { findRepoRoot, loadDotEnv } from "./dotenv.js";
+import {
+  detectDeps,
+  detectOllama,
+  installGlobally,
+  installOllama,
+  ollamaHasModel,
+  ollamaPullModel,
+  waitForOllama,
+} from "./detect.js";
+import { writeConfig, type ProviderChoice } from "./write-config.js";
+import { runSmoke } from "./smoke.js";
+
+export interface InitArgs {
+  args: readonly string[];
+}
+
+export async function runInit(_: InitArgs): Promise<number> {
+  if (!process.stdin.isTTY) {
+    process.stderr.write(
+      "cortex init: interactive wizard requires a TTY. " +
+        "Run from a real terminal.\n",
+    );
+    return 2;
+  }
+
+  const repoRoot = findRepoRoot(process.cwd());
+
+  header("Cortex setup");
+
+  // 1. Engram + Persona
+  await stepDependencies();
+
+  // 2. Provider selection + config
+  const providers = await stepProviders();
+
+  // 2a. If Ollama selected on a local host, make sure the bin is installed
+  //     and the chosen model is pulled.
+  await stepOllamaLocal(providers);
+
+  // 3. Secrets
+  const secrets = await stepSecrets(providers);
+
+  // 4. Default task binding
+  const defaultTask = await stepDefaultTask(providers);
+
+  // 5. Write files
+  const result = await writeConfig({
+    repoRoot,
+    providers,
+    defaultTask,
+    secrets,
+  });
+
+  section("Wrote");
+  line(`  ${path.relative(repoRoot, result.envPath)}`);
+  line(`  ${path.relative(repoRoot, result.configPath)}`);
+  if (result.envBackupPath) {
+    line(`  (previous .env backed up to ${path.relative(repoRoot, result.envBackupPath)})`);
+  }
+  if (result.configBackupPath) {
+    line(
+      `  (previous cortex.yaml backed up to ${path.relative(repoRoot, result.configBackupPath)})`,
+    );
+  }
+
+  // 6. Optional smoke test
+  const shouldSmoke = await confirm({
+    message: "Run a live LLM smoke test now?",
+    default: true,
+  });
+
+  if (shouldSmoke) {
+    section("Smoke test");
+    process.env.CORTEX_CONFIG_PATH = result.configPath;
+    // Propagate the secrets we just collected directly into the current
+    // process environment. loadDotEnv alone isn't enough — a parent shell
+    // may already have these vars set to empty, which makes loadDotEnv skip
+    // them and leaves `${VAR}` references in cortex.yaml unexpanded.
+    for (const [k, v] of Object.entries(secrets)) {
+      if (v) process.env[k] = v;
+    }
+    loadDotEnv(result.envPath);
+    const code = await runSmoke();
+    if (code !== 0) {
+      warn(
+        "Smoke test reported failures. Check the logs above; re-run " +
+          "`cortex smoke` after fixing config.",
+      );
+      return code;
+    }
+  }
+
+  section("Next steps");
+  line("  - Edit config/projects.yaml and config/people.yaml");
+  line("  - Wire Cortex into Claude Code:");
+  line(
+    '      { "mcpServers": { "cortex": { "command": "cortex", "args": ["start"] } } }',
+  );
+  line("  - Run `cortex start` directly for debugging");
+  line("");
+  return 0;
+}
+
+async function stepDependencies(): Promise<void> {
+  section("Engram and Persona");
+  const deps = await detectDeps();
+
+  for (const d of deps) {
+    if (d.installed) {
+      ok(`${d.bin} installed${d.version ? ` (${d.version})` : ""}${d.path ? ` at ${d.path}` : ""}`);
+    } else {
+      miss(`${d.bin} not found on PATH`);
+    }
+  }
+
+  const missing = deps.filter((d) => !d.installed);
+  if (missing.length === 0) return;
+
+  const doInstall = await confirm({
+    message: `Install ${missing.map((m) => m.pkg).join(" + ")} globally now?`,
+    default: true,
+  });
+
+  if (!doInstall) {
+    warn(
+      "Skipping install. You can install later with:\n" +
+        `      npm install -g ${missing.map((m) => m.pkg).join(" ")}`,
+    );
+    return;
+  }
+
+  const code = await installGlobally(missing.map((m) => m.pkg));
+  if (code !== 0) {
+    warn(`npm install exited with ${code}. Continuing — fix and retry later.`);
+    return;
+  }
+
+  const after = await detectDeps();
+  for (const d of after) {
+    if (d.installed) ok(`${d.bin} installed`);
+    else warn(`${d.bin} still not on PATH (shell restart may be required)`);
+  }
+}
+
+async function stepProviders(): Promise<ProviderChoice[]> {
+  section("LLM providers");
+  const selected = await checkbox({
+    message: "Which LLM providers will Cortex use?",
+    choices: [
+      { name: "Ollama (local)", value: "ollama", checked: true },
+      { name: "OpenRouter (cloud BYOK)", value: "openrouter" },
+    ],
+    required: true,
+  });
+
+  const providers: ProviderChoice[] = [];
+
+  if (selected.includes("ollama")) {
+    const host = await input({
+      message: "Ollama host",
+      default: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+      validate: validateOllamaHost,
+    });
+    const defaultModel = await input({
+      message: "Default Ollama model",
+      default: "qwen3:14b",
+    });
+    providers.push({
+      id: "ollama",
+      enabled: true,
+      settings: { host, defaultModel },
+    });
+  }
+
+  if (selected.includes("openrouter")) {
+    providers.push({
+      id: "openrouter",
+      enabled: true,
+      settings: {},
+    });
+  }
+
+  return providers;
+}
+
+async function stepOllamaLocal(providers: ProviderChoice[]): Promise<void> {
+  const ollama = providers.find((p) => p.id === "ollama");
+  if (!ollama || !ollama.enabled) return;
+
+  const host = ollama.settings.host ?? "http://localhost:11434";
+  const model = ollama.settings.defaultModel ?? "qwen3:14b";
+  if (!isLocalHost(host)) {
+    // Remote Ollama (Tailscale, VPS). Nothing to install locally; just
+    // confirm reachability.
+    section("Ollama (remote)");
+    line(`  host: ${host}`);
+    const reachable = await waitForOllama(host, { timeoutMs: 5_000 });
+    if (reachable) ok("reachable");
+    else warn("not reachable yet — make sure the remote host is running");
+    return;
+  }
+
+  section("Ollama (local)");
+  const status = await detectOllama();
+
+  if (status.installed) {
+    ok(`ollama installed${status.version ? ` (${status.version})` : ""}${status.path ? ` at ${status.path}` : ""}`);
+  } else {
+    miss("ollama not found on PATH");
+    const doInstall = await confirm({
+      message: "Install Ollama now?",
+      default: true,
+    });
+    if (!doInstall) {
+      warn("Skipped. Install manually from https://ollama.com/download then re-run `cortex init`.");
+      return;
+    }
+    const code = await installOllama();
+    if (code !== 0) {
+      warn(`Installer exited with ${code}. Continuing — model pull will be skipped.`);
+      return;
+    }
+    const after = await detectOllama();
+    if (after.installed) ok("ollama installed");
+    else {
+      warn("ollama still not on PATH after install (shell restart may be required).");
+      return;
+    }
+  }
+
+  // Wait for the daemon to respond before probing for the model. 10s is
+  // plenty when the daemon is running locally; longer just hides typos.
+  const up = await waitForOllama(host, { timeoutMs: 10_000 });
+  if (!up) {
+    warn(
+      `Ollama didn't respond at ${host} within 10s. ` +
+        `Common causes: typo in host (Ollama is http://, not https://), ` +
+        `firewall blocking 11434, or \`ollama serve\` not running.`,
+    );
+    return;
+  }
+  ok(`ollama daemon responding at ${host}`);
+
+  // Model presence
+  const has = await ollamaHasModel(host, model);
+  if (has === true) {
+    ok(`model '${model}' already pulled`);
+    return;
+  }
+  if (has === undefined) {
+    warn(`Couldn't list models at ${host}. Skipping pull.`);
+    return;
+  }
+
+  miss(`model '${model}' not pulled`);
+  const doPull = await confirm({
+    message: `Pull model '${model}' now?`,
+    default: true,
+  });
+  if (!doPull) {
+    warn(`Skipped. Run \`ollama pull ${model}\` manually before smoke.`);
+    return;
+  }
+  const code = await ollamaPullModel(model);
+  if (code === 0) ok(`pulled '${model}'`);
+  else warn(`ollama pull exited with ${code}`);
+}
+
+/**
+ * Ollama serves plain HTTP on 11434. `https://` at the default port is
+ * almost always a typo, and the connection silently hangs until a 30s
+ * timeout — not what we want in a setup wizard. Reject it up front with
+ * an actionable message. Allow explicit https only when the port is not
+ * 11434 (someone has put TLS in front via a reverse proxy).
+ */
+function validateOllamaHost(v: string): true | string {
+  if (!/^https?:\/\//.test(v)) {
+    return "must start with http:// or https://";
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(v);
+  } catch {
+    return "not a valid URL";
+  }
+  const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+  if (parsed.protocol === "https:" && port === "11434") {
+    return (
+      "Ollama serves plain HTTP on 11434 — use http:// (or change the port " +
+      "if you're proxying TLS in front)"
+    );
+  }
+  return true;
+}
+
+function isLocalHost(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.hostname === "localhost" ||
+      u.hostname === "127.0.0.1" ||
+      u.hostname === "::1" ||
+      u.hostname === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function stepSecrets(
+  providers: ProviderChoice[],
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+
+  const ollama = providers.find((p) => p.id === "ollama");
+  if (ollama) {
+    out.OLLAMA_HOST = ollama.settings.host ?? "http://localhost:11434";
+  }
+
+  if (providers.some((p) => p.id === "openrouter")) {
+    section("OpenRouter");
+    const key = await password({
+      message: "OpenRouter API key (input hidden; leave blank to skip)",
+      mask: "*",
+    });
+    if (key) out.OPENROUTER_API_KEY = key;
+    else warn("Skipped — provider will fail at init until key is set in .env");
+  }
+
+  return out;
+}
+
+async function stepDefaultTask(
+  providers: ProviderChoice[],
+): Promise<{ provider: string; model: string }> {
+  section("Default task routing");
+
+  if (providers.length === 1) {
+    const only = providers[0]!;
+    const model =
+      only.id === "ollama"
+        ? (only.settings.defaultModel ?? "qwen3:14b")
+        : await input({
+            message: `Default model for ${only.id}`,
+            default: "anthropic/claude-haiku-4.5",
+          });
+    return { provider: only.id, model };
+  }
+
+  const providerId = await select({
+    message: "Which provider should handle the default task?",
+    choices: providers.map((p) => ({ name: p.id, value: p.id })),
+  });
+
+  const model = await input({
+    message: `Default model on ${providerId}`,
+    default:
+      providerId === "ollama"
+        ? (providers.find((p) => p.id === "ollama")?.settings.defaultModel ??
+          "qwen3:14b")
+        : "anthropic/claude-haiku-4.5",
+  });
+
+  return { provider: providerId, model };
+}
+
+// Lightweight formatters so we don't pull in chalk.
+function header(s: string): void {
+  process.stdout.write(`\n${s}\n${"=".repeat(s.length)}\n\n`);
+}
+function section(s: string): void {
+  process.stdout.write(`\n${s}\n${"-".repeat(s.length)}\n`);
+}
+function line(s: string): void {
+  process.stdout.write(`${s}\n`);
+}
+function ok(s: string): void {
+  process.stdout.write(`  [ok]   ${s}\n`);
+}
+function miss(s: string): void {
+  process.stdout.write(`  [miss] ${s}\n`);
+}
+function warn(s: string): void {
+  process.stdout.write(`  [warn] ${s}\n`);
+}

@@ -1,0 +1,13 @@
+# Project taxonomy. Authoritative list of work projects. Changes require a
+# server restart. See docs/SETUP.md for how to populate this.
+
+projects: []
+  # - slug: project-alpha
+  #   name: "Project Alpha"
+  #   description: "One-sentence description."
+  #   active: true
+  #   aliases: ["Alpha", "Proj A"]
+  #   people: [matt]
+  #   sources:
+  #     confluence_space: "ALPHA"
+  #     bitbucket_repos: ["alpha-backend"]

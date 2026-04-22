@@ -1,0 +1,21 @@
+# Written by `cortex init`. Re-run the wizard to regenerate.
+
+llm:
+  providers:
+    ollama:
+      package: "@cortex/provider-ollama"
+      enabled: true
+      config:
+        host: "${OLLAMA_HOST}"
+        defaultModel: "qwen3:14b"
+
+  tasks:
+    default:    { provider: ollama, model: "qwen3:14b" }
+    structural: { provider: ollama, model: "qwen3:14b" }
+    synthesis:  { provider: ollama, model: "qwen3:14b" }
+    brief:      { provider: ollama, model: "qwen3:14b" }
+    classify:   { provider: ollama, model: "qwen3:14b" }
+
+  fallbackChain: []
+
+adapters: {}
