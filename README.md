@@ -42,8 +42,8 @@ into every adapter. **Memory governance metadata** — `trust`,
 # Global install (once published)
 npm install -g @onenomad/cortex
 
-# Or develop locally
-git clone https://github.com/mattstvartak/cortex.git
+# Or develop locally (this is a private repo; access is provisioned)
+git clone <your-cortex-repo-url>
 cd cortex
 pnpm install
 ```

@@ -31,3 +31,8 @@ jobs:
 
       - name: Test (unit)
         run: pnpm test
+
+      - name: Identifier scan
+        # Belt-and-suspenders alongside the local pre-commit hook — catches
+        # commits that bypassed it with --no-verify. See docs/PRIVACY.md.
+        run: git ls-files | xargs bash scripts/identifier-scan.sh

@@ -112,13 +112,13 @@ during dev, consumed over MCP.
 
 ```powershell
 cd ..
-git clone https://github.com/mattstvartak/engram.git
+git clone <your-engram-repo-url>
 cd engram
 pnpm install    # or npm install
 pnpm run build
 
 cd ..
-git clone https://github.com/mattstvartak/persona.git
+git clone <your-persona-repo-url>
 cd persona
 pnpm install
 pnpm run build
@@ -206,15 +206,15 @@ Even 2-3 real projects is enough to start. Fill in the rest over time.
 
 ```yaml
 people:
-  - slug: matt
-    name: "Matt Stvartak"
-    email: matt@company.com
+  - slug: you
+    name: "Your Name"
+    email: you@example.com
     projects: [project-alpha, project-beta]
     role: "Engineering"
 
   - slug: sarah
     name: "Sarah Example"
-    email: sarah@company.com
+    email: sarah@example.com
     projects: [project-alpha]
     role: "Product"
 ```

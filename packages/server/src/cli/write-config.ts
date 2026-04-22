@@ -154,7 +154,9 @@ function buildProviderBlock(p: ProviderChoice): string[] {
       cfg.push(`defaultModel: "${p.settings.defaultModel}"`);
     }
   } else if (p.id === "openrouter") {
-    cfg.push('referer: "https://github.com/mattstvartak/cortex"');
+    // Referer is omitted — the provider's schema default (https://cortex.local)
+    // applies unless the operator sets one manually. Keeps the generated
+    // config identifier-free.
     cfg.push('appTitle: "Cortex"');
   }
 

@@ -1,0 +1,49 @@
+# Allow-list for identifier-scan.sh.
+#
+# One substring per line. A scanned line that contains any of these is
+# skipped — use for false positives (placeholder emails, vendor URLs the
+# adapter code legitimately constructs, etc.).
+#
+# Comments start with #.
+
+# Placeholder email domains used in docs and fixtures
+@example.com
+@example.org
+@cortex.local
+@company.com
+boss@co.com
+
+# Placeholder workspace subdomains
+yourcompany.atlassian.net
+example.atlassian.net
+acme.atlassian.net
+yourcompany.slack.com
+yourco.slack.com
+example.slack.com
+
+# Repo's own GitHub URL pattern when wrapped as a template — keep scoped to
+# the obvious "this is a placeholder" forms.
+<your-cortex-repo-url>
+<your-engram-repo-url>
+<your-persona-repo-url>
+<your-org>/cortex
+<you>/cortex
+github.com/yourco/
+
+# Atlassian domain references in URL-construction code (legitimate vendor
+# structure usage)
+.atlassian.net/wiki/api/v2
+.atlassian.net/wiki/spaces
+.atlassian.net/wiki$
+.atlassian.net/rest/api/3
+.atlassian.net/browse
+${opts.workspace}.atlassian.net
+
+# OpenRouter vendor domains referenced in provider config/examples
+openrouter.ai/api
+cortex.local
+your-cortex.example
+
+# GitHub vendor paths referenced in tooling (not client leaks)
+github.com/anthropics
+github.com/modelcontextprotocol

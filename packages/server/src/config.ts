@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
@@ -82,14 +83,44 @@ export type ProviderEntry = z.infer<typeof providerEntrySchema>;
 export type AdapterEntry = z.infer<typeof adapterEntrySchema>;
 
 /**
- * Loads and validates cortex.yaml. Expands `${ENV_VAR}` references from
- * `process.env` in string values only.
+ * Loads and validates cortex.yaml.
+ *
+ * Resolution order (first hit wins):
+ *   1. `<dir>/<name>.local.yaml`   — caller's real, gitignored config
+ *   2. `<dir>/<name>.yaml`         — committed template
+ *
+ * Rationale: real deployment data (workspace names, space keys, client
+ * mappings) must never be committed. Operators write their real config into
+ * `cortex.local.yaml`, which is in .gitignore, and the loader transparently
+ * prefers it. See docs/PRIVACY.md.
+ *
+ * Expands `${ENV_VAR}` references from `process.env` in string values.
  */
-export async function loadCortexConfig(path: string): Promise<CortexConfig> {
-  const raw = await readFile(path, "utf8");
+export async function loadCortexConfig(configPath: string): Promise<CortexConfig> {
+  const resolved = await resolveLocalFirst(configPath);
+  const raw = await readFile(resolved, "utf8");
   const substituted = expandEnv(raw);
   const parsed: unknown = parseYaml(substituted);
   return cortexConfigSchema.parse(parsed);
+}
+
+/**
+ * Given a path like `config/cortex.yaml`, prefer `config/cortex.local.yaml`
+ * if it exists. Same-directory, same-basename, `.local.yaml` suffix. Used by
+ * every config loader (cortex.yaml, projects.yaml, people.yaml, future
+ * engagements.yaml) so the pattern is uniform.
+ */
+export async function resolveLocalFirst(configPath: string): Promise<string> {
+  const ext = path.extname(configPath);
+  if (ext !== ".yaml" && ext !== ".yml") return configPath;
+  const base = configPath.slice(0, -ext.length);
+  const localPath = `${base}.local${ext}`;
+  try {
+    await readFile(localPath, "utf8");
+    return localPath;
+  } catch {
+    return configPath;
+  }
 }
 
 /**

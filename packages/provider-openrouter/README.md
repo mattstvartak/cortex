@@ -12,8 +12,8 @@ llm:
       enabled: true
       config:
         baseUrl: "https://openrouter.ai/api/v1"   # optional
-        referer: "https://github.com/mattstvartak/cortex"
-        appTitle: "Cortex"
+        appTitle: "Cortex"                         # optional, sent as X-Title
+        # referer: "https://your-cortex.example"   # optional, sent as HTTP-Referer (defaults to cortex.local)
 ```
 
 Required secrets: `OPENROUTER_API_KEY`.

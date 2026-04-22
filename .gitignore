@@ -17,6 +17,15 @@ build/
 credentials.json
 credentials/
 
+# Client-specific config — never committed, always overrides the .yaml template
+# See docs/PRIVACY.md for the rule.
+config/*.local.yaml
+config/local/
+config/local/**
+
+# Per-user runtime state (approvals, heartbeat, personal Engram data dir)
+.cortex/
+
 # Wizard backups
 **/*.bak.*
 

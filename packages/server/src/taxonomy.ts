@@ -8,6 +8,7 @@ import {
   type TaxonomyReader,
 } from "@cortex/core";
 import { parse as parseYaml } from "yaml";
+import { resolveLocalFirst } from "./config.js";
 
 export interface LoadedTaxonomy extends TaxonomyReader {
   readonly projects: ReadonlyArray<Project>;
@@ -43,8 +44,11 @@ async function loadPeople(path: string): Promise<Person[]> {
 }
 
 async function tryRead(path: string): Promise<string | undefined> {
+  // Prefer `<name>.local.yaml` over the committed template. Same rule as
+  // cortex.yaml — real data stays out of git. See docs/PRIVACY.md.
+  const resolved = await resolveLocalFirst(path);
   try {
-    return await readFile(path, "utf8");
+    return await readFile(resolved, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw err;
