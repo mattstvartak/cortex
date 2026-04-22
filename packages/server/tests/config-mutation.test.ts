@@ -130,6 +130,76 @@ describe("config-mutation", () => {
     expect(projects).toContain("slug: gamma");
   });
 
+  it("disableModule routes by category for providers (llm.providers.<id>.enabled)", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "openrouter",
+        category: "provider",
+        config: { appTitle: "Cortex", referer: "https://cortex.local", baseUrl: "https://openrouter.ai/api/v1" },
+        secrets: { OPENROUTER_API_KEY: "sk-test" },
+      },
+    );
+    await disableModule({ repoRoot: root }, "openrouter", "provider");
+    const local = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    // The enabled flag under llm.providers.openrouter is now false.
+    expect(local).toMatch(/openrouter:\s*\n(?:\s+[^\n]*\n)*?\s+enabled: false/);
+    // Config is preserved so re-enabling keeps settings.
+    expect(local).toContain("appTitle: Cortex");
+  });
+
+  it("disableModule for memory clears memory.fallback but keeps the backend config", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "pgvector",
+        category: "memory",
+        config: { connectionString: "${POSTGRES_URL}", table: "cortex_memories", embeddingDim: 768 },
+        secrets: {},
+      },
+    );
+    const beforeLocal = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    expect(beforeLocal).toContain("fallback: pgvector");
+
+    await disableModule({ repoRoot: root }, "pgvector", "memory");
+    const after = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    expect(after).not.toContain("fallback: pgvector");
+    // The backend block itself stays so re-enabling doesn't wipe it.
+    expect(after).toContain("pgvector:");
+    expect(after).toContain("table: cortex_memories");
+  });
+
+  it("readModuleConfig with category=provider returns provider config, not undefined", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "ollama",
+        category: "provider",
+        config: { host: "http://localhost:11434", defaultModel: "qwen3:14b" },
+        secrets: {},
+      },
+    );
+    // Without the category arg, readModuleConfig would look under
+    // `adapters.ollama` and return undefined — which would make
+    // `cortex configure ollama` lose all pre-filled defaults.
+    const defaulted = await readModuleConfig({ repoRoot: root }, "ollama");
+    expect(defaulted).toBeUndefined();
+    const correct = await readModuleConfig({ repoRoot: root }, "ollama", "provider");
+    expect(correct).toMatchObject({ host: "http://localhost:11434", defaultModel: "qwen3:14b" });
+  });
+
   it("disableModule flips enabled: false and leaves config in place", async () => {
     const root = await makeRepo();
     await applyWizardResult(

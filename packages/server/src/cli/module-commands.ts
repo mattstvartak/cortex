@@ -70,7 +70,10 @@ export async function runConfigure(args: readonly string[]): Promise<number> {
   const repoRoot = findRepoRoot(process.cwd());
   loadDotEnv(repoRoot);
 
-  const current = await readModuleConfig({ repoRoot }, moduleId);
+  // Read using the wizard's declared category — otherwise non-adapter
+  // modules (providers, memory, webhooks) would miss their current values
+  // because readModuleConfig would look under `adapters.<id>` by default.
+  const current = await readModuleConfig({ repoRoot }, moduleId, wizard.category);
   const result = await runWizard(wizard, {
     ...(current ? { currentValues: current } : {}),
     // Current secrets pulled from process.env after loadDotEnv.
@@ -96,7 +99,10 @@ export async function runDisable(args: readonly string[]): Promise<number> {
     return 2;
   }
   const repoRoot = findRepoRoot(process.cwd());
-  await disableModule({ repoRoot }, moduleId);
+  // Look up the category so non-adapter modules (providers, memory,
+  // webhooks) disable in the right YAML section.
+  const wizard = findWizard(moduleId);
+  await disableModule({ repoRoot }, moduleId, wizard?.category);
   process.stdout.write(`Disabled "${moduleId}" in config/cortex.local.yaml.\n`);
   return 0;
 }

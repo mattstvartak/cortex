@@ -75,18 +75,57 @@ export async function applyWizardResult(
 export async function disableModule(
   opts: ConfigMutationOptions,
   moduleId: string,
+  category: "adapter" | "provider" | "memory" | "toolkit" | "webhook" = "adapter",
 ): Promise<void> {
   const configPath = await ensureLocalCopy(
     path.join(opts.repoRoot, "config", "cortex.yaml"),
   );
   await mutateYaml(configPath, (doc) => {
     const cfg = (doc ?? {}) as Record<string, unknown>;
-    const adapters = ((cfg.adapters as Record<string, unknown>) ??
-      {}) as Record<string, unknown>;
-    const current = (adapters[moduleId] as Record<string, unknown>) ?? {};
-    adapters[moduleId] = { ...current, enabled: false };
-    cfg.adapters = adapters;
-    return cfg;
+    switch (category) {
+      case "adapter": {
+        const adapters = ((cfg.adapters as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        const current = (adapters[moduleId] as Record<string, unknown>) ?? {};
+        adapters[moduleId] = { ...current, enabled: false };
+        cfg.adapters = adapters;
+        return cfg;
+      }
+      case "provider": {
+        const llm = ((cfg.llm as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        const providers = ((llm.providers as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        const current = (providers[moduleId] as Record<string, unknown>) ?? {};
+        providers[moduleId] = { ...current, enabled: false };
+        llm.providers = providers;
+        cfg.llm = llm;
+        return cfg;
+      }
+      case "memory": {
+        // "Disable" for a memory backend = stop using it as the fallback.
+        // Leave the config block in place so re-enabling keeps settings.
+        const memory = ((cfg.memory as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        if (memory.fallback === moduleId) delete memory.fallback;
+        cfg.memory = memory;
+        return cfg;
+      }
+      case "webhook": {
+        const webhooks = ((cfg.webhooks as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        webhooks.enabled = false;
+        cfg.webhooks = webhooks;
+        return cfg;
+      }
+      case "toolkit": {
+        const toolkits = ((cfg.toolkits as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        const current = (toolkits[moduleId] as Record<string, unknown>) ?? {};
+        toolkits[moduleId] = { ...current, enabled: false };
+        cfg.toolkits = toolkits;
+        return cfg;
+      }
+      default: {
+        const _exhaust: never = category;
+        void _exhaust;
+        return cfg;
+      }
+    }
   });
 }
 
