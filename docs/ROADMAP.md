@@ -4,13 +4,13 @@ Canonical build order and current state. Update after every meaningful session.
 
 ## Current Phase
 
-**Six source adapters + two pipelines live.** Adapters: Confluence,
-Jira, Linear, Loom, Notion, Obsidian. Pipelines: `@cortex/pipeline-doc`
-and `@cortex/pipeline-meeting`. Loom feeds pipeline-meeting end-to-end;
-transcripts come in, briefs + decisions + action items come out.
-`cortex sync` wires the LLM router into pipelines. 93 tests. Remaining:
-Google family (OAuth), Bitbucket/GitHub (pipeline-code), Slack/Gmail
-(pipeline-conversation).
+**Nine source adapters + two pipelines live.** Adapters: Confluence,
+Jira, Linear, Loom, Notion, Obsidian, Google Calendar, Google Drive,
+Gmail. The three Google adapters share `@cortex/google-auth` — an
+installed-app OAuth primitive that mints access tokens from a stored
+refresh token. Pipelines: `@cortex/pipeline-doc` and
+`@cortex/pipeline-meeting`. 98 tests. Remaining: Bitbucket/GitHub
+(pipeline-code), Slack (pipeline-conversation).
 
 ## Phase 0: Setup (manual, pre-development)
 

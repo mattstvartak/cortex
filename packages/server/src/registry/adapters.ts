@@ -5,6 +5,9 @@ import type {
   SourceAdapter,
 } from "@cortex/core";
 import { createAdapter as createConfluenceAdapter } from "@cortex/adapter-confluence";
+import { createAdapter as createGmailAdapter } from "@cortex/adapter-gmail";
+import { createAdapter as createGoogleCalendarAdapter } from "@cortex/adapter-google-calendar";
+import { createAdapter as createGoogleDriveAdapter } from "@cortex/adapter-google-drive";
 import { createAdapter as createJiraAdapter } from "@cortex/adapter-jira";
 import { createAdapter as createLinearAdapter } from "@cortex/adapter-linear";
 import { createAdapter as createLoomAdapter } from "@cortex/adapter-loom";
@@ -19,19 +22,18 @@ import type { CortexConfig } from "../config.js";
  */
 const adapterFactories: Record<string, AdapterFactory> = {
   "@cortex/adapter-confluence": createConfluenceAdapter,
+  "@cortex/adapter-gmail": createGmailAdapter,
+  "@cortex/adapter-google-calendar": createGoogleCalendarAdapter,
+  "@cortex/adapter-google-drive": createGoogleDriveAdapter,
   "@cortex/adapter-jira": createJiraAdapter,
   "@cortex/adapter-linear": createLinearAdapter,
   "@cortex/adapter-loom": createLoomAdapter,
   "@cortex/adapter-notion": createNotionAdapter,
   "@cortex/adapter-obsidian": createObsidianAdapter,
   // Future adapters, each in its own package:
-  // "@cortex/adapter-google-calendar": createCalendarAdapter,
-  // "@cortex/adapter-google-drive": createGoogleDriveAdapter,
   // "@cortex/adapter-bitbucket": createBitbucketAdapter,
   // "@cortex/adapter-github": createGithubAdapter,
   // "@cortex/adapter-slack": createSlackAdapter,
-  // "@cortex/adapter-gmail": createGmailAdapter,
-  // "@cortex/adapter-linear": createLinearAdapter,
 };
 
 export interface AdapterRegistry {

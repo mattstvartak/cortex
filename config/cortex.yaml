@@ -89,10 +89,41 @@ adapters:
       defaultProject: ""
       maxFileBytes: 1048576
 
+  google-calendar:
+    package: "@cortex/adapter-google-calendar"
+    enabled: false
+    schedule: "*/30 * * * *"
+    config:
+      calendars: ["primary"]
+      lookAheadDays: 14
+      lookBackDays: 1
+      pageSize: 250
+      calendarToProject: {}
+      defaultProject: ""
+
+  google-drive:
+    package: "@cortex/adapter-google-drive"
+    enabled: false
+    schedule: "0 */6 * * *"
+    config:
+      folderIds: []
+      mimeTypes: ["application/vnd.google-apps.document"]
+      pageSize: 100
+      maxFilesPerRun: 0
+      folderToProject: {}
+      defaultProject: ""
+
+  gmail:
+    package: "@cortex/adapter-gmail"
+    enabled: false
+    schedule: "0 */2 * * *"
+    config:
+      query: "label:inbox newer_than:30d"
+      maxThreadsPerRun: 50
+      labelToProject: {}
+      defaultProject: ""
+
   # Future adapters — each lands as its own package.
   # bitbucket:      { package: "@cortex/adapter-bitbucket",      enabled: false }
   # github:         { package: "@cortex/adapter-github",         enabled: false }
-  # google-drive:   { package: "@cortex/adapter-google-drive",   enabled: false }
-  # google-calendar:{ package: "@cortex/adapter-google-calendar",enabled: false }
-  # gmail:          { package: "@cortex/adapter-gmail",          enabled: false }
   # slack:          { package: "@cortex/adapter-slack",          enabled: false }
