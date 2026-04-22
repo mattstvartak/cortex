@@ -137,6 +137,14 @@ export interface DerivedTaxonomy {
  */
 export interface WizardResult<TConfig = unknown> {
   moduleId: string;
+  /**
+   * Which section of `cortex.local.yaml` this result lands in. Required
+   * for the config-mutation service to route correctly: adapters live
+   * under `adapters.<id>`, providers under `llm.providers.<id>`, memory
+   * under `memory.<id>`, webhooks merged into the `webhooks` block.
+   * Defaults to "adapter" for back-compat with earlier wizards.
+   */
+  category?: WizardModule["category"];
   config: TConfig;
   secrets: Record<string, string>;
   derivedTaxonomy?: DerivedTaxonomy;

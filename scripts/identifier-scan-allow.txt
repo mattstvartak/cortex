@@ -47,3 +47,4 @@ your-cortex.example
 # GitHub vendor paths referenced in tooling (not client leaks)
 github.com/anthropics
 github.com/modelcontextprotocol
+github.com/pgvector/pgvector

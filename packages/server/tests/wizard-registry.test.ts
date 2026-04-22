@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { listWizards, findWizard, wizardsByCategory } from "../src/cli/wizard-registry.js";
 
 describe("wizard-registry", () => {
-  it("exposes a wizard for every adapter that supports guided setup", () => {
+  it("exposes a wizard for every module that supports guided setup", () => {
     const ids = listWizards().map((w) => w.id).sort();
     // Google stack is deferred (OAuth flow). When its wizards land, update
     // this assertion to include them.
@@ -15,7 +15,11 @@ describe("wizard-registry", () => {
       "loom",
       "notion",
       "obsidian",
+      "ollama",
+      "openrouter",
+      "pgvector",
       "slack",
+      "webhooks",
     ]);
   });
 
@@ -24,7 +28,7 @@ describe("wizard-registry", () => {
       expect(w.id).toMatch(/^[a-z][a-z0-9-]*$/);
       expect(w.name.length).toBeGreaterThan(0);
       expect(w.description.length).toBeGreaterThan(0);
-      expect(w.category).toBe("adapter");
+      expect(["adapter", "provider", "memory", "toolkit", "webhook"]).toContain(w.category);
       expect(w.steps.length).toBeGreaterThan(0);
       expect(typeof w.configSchema.safeParse).toBe("function");
     }
@@ -46,7 +50,14 @@ describe("wizard-registry", () => {
   it("groups every wizard under its category", () => {
     const buckets = wizardsByCategory();
     const adapters = buckets.get("adapter") ?? [];
-    expect(adapters.length).toBe(listWizards().length);
+    const providers = buckets.get("provider") ?? [];
+    const memories = buckets.get("memory") ?? [];
+    const webhooks = buckets.get("webhook") ?? [];
+    // Every listed wizard lands in exactly one bucket.
+    const total = adapters.length + providers.length + memories.length + webhooks.length;
+    expect(total).toBe(listWizards().length);
+    expect(adapters.length).toBeGreaterThan(0);
+    expect(providers.length).toBeGreaterThan(0);
   });
 
   it("repeat-per steps point at a source key that produces a list earlier in the spec", () => {

@@ -63,6 +63,7 @@ export async function runWizard<TConfig>(
 
   return {
     moduleId: module.id,
+    category: module.category,
     config: parsed.data,
     secrets,
     ...(derivedTaxonomy ? { derivedTaxonomy: pruneEmpty(derivedTaxonomy) } : {}),

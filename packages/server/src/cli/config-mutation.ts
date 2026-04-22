@@ -34,18 +34,15 @@ export async function applyWizardResult(
   result: WizardResult,
 ): Promise<{ filesWritten: string[] }> {
   const touched: string[] = [];
+  const category = result.category ?? "adapter";
 
-  // 1. cortex.local.yaml — adapter block.
+  // 1. cortex.local.yaml — the YAML section varies by category.
   const configPath = await ensureLocalCopy(
     path.join(opts.repoRoot, "config", "cortex.yaml"),
   );
   await mutateYaml(configPath, (doc) => {
     const cfg = (doc ?? {}) as Record<string, unknown>;
-    const adapters = ((cfg.adapters as Record<string, unknown>) ??
-      {}) as Record<string, unknown>;
-    adapters[result.moduleId] = buildAdapterEntry(result);
-    cfg.adapters = adapters;
-    return cfg;
+    return applyByCategory(cfg, result, category);
   });
   touched.push(configPath);
 
@@ -101,15 +98,37 @@ export async function disableModule(
 export async function readModuleConfig(
   opts: ConfigMutationOptions,
   moduleId: string,
+  category: "adapter" | "provider" | "memory" | "toolkit" | "webhook" = "adapter",
 ): Promise<Record<string, unknown> | undefined> {
   const localPath = path.join(opts.repoRoot, "config", "cortex.local.yaml");
   const basePath = path.join(opts.repoRoot, "config", "cortex.yaml");
   const source = await tryReadYaml(localPath) ?? await tryReadYaml(basePath);
   if (!source) return undefined;
-  const adapters = source.adapters as Record<string, unknown> | undefined;
-  if (!adapters) return undefined;
-  const entry = adapters[moduleId] as { config?: Record<string, unknown> } | undefined;
-  return entry?.config;
+
+  switch (category) {
+    case "adapter": {
+      const adapters = source.adapters as Record<string, unknown> | undefined;
+      const entry = adapters?.[moduleId] as { config?: Record<string, unknown> } | undefined;
+      return entry?.config;
+    }
+    case "provider": {
+      const llm = source.llm as Record<string, unknown> | undefined;
+      const providers = llm?.providers as Record<string, unknown> | undefined;
+      const entry = providers?.[moduleId] as { config?: Record<string, unknown> } | undefined;
+      return entry?.config;
+    }
+    case "memory": {
+      const memory = source.memory as Record<string, unknown> | undefined;
+      return memory?.[moduleId] as Record<string, unknown> | undefined;
+    }
+    case "webhook": {
+      return source.webhooks as Record<string, unknown> | undefined;
+    }
+    case "toolkit": {
+      const toolkits = source.toolkits as Record<string, unknown> | undefined;
+      return toolkits?.[moduleId] as Record<string, unknown> | undefined;
+    }
+  }
 }
 
 // --- internals ---
@@ -123,6 +142,75 @@ function buildAdapterEntry(result: WizardResult): Record<string, unknown> {
     // sync only.
     config: result.config as Record<string, unknown>,
   };
+}
+
+function buildProviderEntry(result: WizardResult): Record<string, unknown> {
+  return {
+    package: `@cortex/provider-${result.moduleId}`,
+    enabled: true,
+    config: result.config as Record<string, unknown>,
+  };
+}
+
+/**
+ * Apply a wizard result to the in-memory YAML doc according to its
+ * category. Four shapes are supported:
+ *
+ *   adapter   → `adapters.<id>         = { package, enabled, config }`
+ *   provider  → `llm.providers.<id>    = { package, enabled, config }`
+ *   memory    → `memory.<id>           = config` (plus `memory.fallback` hint)
+ *   webhook   → `webhooks              = { ...webhooks, ...config }`
+ */
+function applyByCategory(
+  cfg: Record<string, unknown>,
+  result: WizardResult,
+  category: "adapter" | "provider" | "memory" | "toolkit" | "webhook",
+): Record<string, unknown> {
+  switch (category) {
+    case "adapter": {
+      const adapters = ((cfg.adapters as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      adapters[result.moduleId] = buildAdapterEntry(result);
+      cfg.adapters = adapters;
+      return cfg;
+    }
+    case "provider": {
+      const llm = ((cfg.llm as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      const providers = ((llm.providers as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      providers[result.moduleId] = buildProviderEntry(result);
+      llm.providers = providers;
+      cfg.llm = llm;
+      return cfg;
+    }
+    case "memory": {
+      const memory = ((cfg.memory as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      // Memory wizards land their config under `memory.<id>` (e.g.
+      // `memory.pgvector = { connectionString, table, ... }`) and hint
+      // the runtime by setting memory.fallback = <id>. The primary stays
+      // whatever the template had (usually "engram").
+      memory[result.moduleId] = result.config as Record<string, unknown>;
+      if (result.moduleId !== "engram" && !memory.fallback) {
+        memory.fallback = result.moduleId;
+      }
+      cfg.memory = memory;
+      return cfg;
+    }
+    case "webhook": {
+      const existing = ((cfg.webhooks as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      cfg.webhooks = { ...existing, ...(result.config as Record<string, unknown>) };
+      return cfg;
+    }
+    case "toolkit": {
+      const toolkits = ((cfg.toolkits as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+      toolkits[result.moduleId] = result.config as Record<string, unknown>;
+      cfg.toolkits = toolkits;
+      return cfg;
+    }
+    default: {
+      const _exhaust: never = category;
+      void _exhaust;
+      return cfg;
+    }
+  }
 }
 
 /**

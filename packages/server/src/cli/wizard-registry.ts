@@ -8,6 +8,10 @@ import { loomWizard } from "@cortex/adapter-loom";
 import { notionWizard } from "@cortex/adapter-notion";
 import { obsidianWizard } from "@cortex/adapter-obsidian";
 import { slackWizard } from "@cortex/adapter-slack";
+import { pgvectorWizard } from "@cortex/memory-pgvector";
+import { ollamaWizard } from "@cortex/provider-ollama";
+import { openrouterWizard } from "@cortex/provider-openrouter";
+import { webhooksWizard } from "./webhooks-wizard.js";
 
 /**
  * Static registry of wizard specs known to the CLI.
@@ -22,6 +26,7 @@ import { slackWizard } from "@cortex/adapter-slack";
  * text/password prompts. Tracked for a Google-auth wizard sprint.
  */
 const WIZARDS: WizardModule[] = [
+  // adapters
   confluenceWizard,
   jiraWizard,
   bitbucketWizard,
@@ -31,6 +36,13 @@ const WIZARDS: WizardModule[] = [
   notionWizard,
   obsidianWizard,
   slackWizard,
+  // llm providers
+  ollamaWizard,
+  openrouterWizard,
+  // memory backends
+  pgvectorWizard,
+  // webhooks
+  webhooksWizard,
 ];
 
 const BY_ID = new Map<string, WizardModule>();

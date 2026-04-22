@@ -163,6 +163,78 @@ describe("config-mutation", () => {
     expect(cfg).toMatchObject({ workspace: "read-me", spaces: ["A", "B"] });
   });
 
+  it("provider category writes under llm.providers, not adapters", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "openrouter",
+        category: "provider",
+        config: { appTitle: "Cortex", referer: "https://cortex.local", baseUrl: "https://openrouter.ai/api/v1" },
+        secrets: { OPENROUTER_API_KEY: "sk-or-test" },
+      },
+    );
+    const local = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    expect(local).toMatch(/llm:\s*\n(?:.*\n)*?\s*providers:\s*\n(?:.*\n)*?\s*openrouter:/);
+    expect(local).toContain("package: \"@cortex/provider-openrouter\"");
+    expect(local).toContain("appTitle: Cortex");
+    // Should NOT land under adapters.
+    const adaptersMatch = local.match(/^adapters:\s*\n((?:  [^\n]*\n)*)/m);
+    expect(adaptersMatch?.[1] ?? "").not.toContain("openrouter");
+
+    const env = await readFile(path.join(root, ".env"), "utf8");
+    expect(env).toContain("OPENROUTER_API_KEY=sk-or-test");
+  });
+
+  it("memory category sets the named backend block and bumps memory.fallback", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "pgvector",
+        category: "memory",
+        config: {
+          connectionString: "${POSTGRES_URL}",
+          table: "cortex_memories",
+          embeddingDim: 768,
+        },
+        secrets: { POSTGRES_URL: "postgres://u:p@h:5432/db" },
+      },
+    );
+    const local = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    expect(local).toContain("pgvector:");
+    expect(local).toContain("fallback: pgvector");
+    expect(local).toContain("table: cortex_memories");
+    const env = await readFile(path.join(root, ".env"), "utf8");
+    expect(env).toContain("POSTGRES_URL=postgres://u:p@h:5432/db");
+  });
+
+  it("webhook category merges into the webhooks block", async () => {
+    const root = await makeRepo();
+    await applyWizardResult(
+      { repoRoot: root },
+      {
+        moduleId: "webhooks",
+        category: "webhook",
+        config: { enabled: true, host: "0.0.0.0", port: 4040 },
+        secrets: {},
+      },
+    );
+    const local = await readFile(
+      path.join(root, "config", "cortex.local.yaml"),
+      "utf8",
+    );
+    expect(local).toContain("webhooks:");
+    expect(local).toContain("enabled: true");
+    expect(local).toContain("port: 4040");
+  });
+
   it("jira wizard result lands under its own adapter block alongside confluence", async () => {
     const root = await makeRepo();
     // Enable confluence first.
