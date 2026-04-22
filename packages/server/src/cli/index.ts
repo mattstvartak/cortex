@@ -1,6 +1,7 @@
 import { autoLoadDotEnv } from "./dotenv.js";
 import { runInit } from "./init.js";
 import { runSmoke } from "./smoke.js";
+import { runSyncCli } from "./sync.js";
 import { startServer } from "../mcp/server.js";
 
 const HELP = `cortex — work-knowledge MCP server and CLI
@@ -9,11 +10,14 @@ Usage:
   cortex <command> [options]
 
 Commands:
-  init       Interactive setup wizard. Writes .env and config/cortex.yaml.
-             Detects and optionally installs Engram/Persona MCP servers.
-  start      Boot the Cortex MCP server over stdio (for Claude Code / clients).
-  smoke      Run a live LLM probe against every enabled provider.
-  help       Show this message.
+  init                       Interactive setup wizard.
+  start                      Boot the Cortex MCP server over stdio.
+  smoke                      Run a live LLM probe against every enabled provider.
+  sync <adapter> [flags]     Run one adapter's full ingestion cycle once.
+                               --since=ISO  only items updated after this date
+                               --limit=N    cap items processed
+                               --dry-run    don't write to Engram
+  help                       Show this message.
 
 Environment:
   CORTEX_CONFIG_PATH   Path to cortex.yaml (default: ./config/cortex.yaml)
@@ -47,6 +51,9 @@ export async function runCli(argv: string[]): Promise<number> {
 
     case "smoke":
       return runSmoke();
+
+    case "sync":
+      return runSyncCli(rest);
 
     case "start":
       await startServer();

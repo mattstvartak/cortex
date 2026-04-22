@@ -4,32 +4,49 @@ import type {
   Logger,
   SourceAdapter,
 } from "@cortex/core";
+import { createAdapter as createConfluenceAdapter } from "@cortex/adapter-confluence";
 import type { CortexConfig } from "../config.js";
 
 /**
- * Static registry of adapter factories. As each adapter package lands in
- * later phases, import and add it here.
- *
- * Intentionally empty in Phase 1.
+ * Static registry of adapter factories. When a new adapter package lands,
+ * import it and add it here. ADR-009: static imports, not dynamic
+ * `require()` — keeps the TypeScript check honest.
  */
 const adapterFactories: Record<string, AdapterFactory> = {
-  // "@cortex/adapter-loom": createLoomAdapter,        // Phase 4
-  // "@cortex/adapter-confluence": createConfluenceAdapter,  // Phase 5
+  "@cortex/adapter-confluence": createConfluenceAdapter,
+  // "@cortex/adapter-loom": createLoomAdapter,         // Phase 4
   // "@cortex/adapter-calendar": createCalendarAdapter, // Phase 6
   // "@cortex/adapter-obsidian": createObsidianAdapter, // Phase 9
   // "@cortex/adapter-bitbucket": createBitbucketAdapter, // Phase 10
+  // "@cortex/adapter-jira": createJiraAdapter,
+  // "@cortex/adapter-notion": createNotionAdapter,
+  // "@cortex/adapter-google-drive": ...,
+  // "@cortex/adapter-slack": ...,
+  // "@cortex/adapter-gmail": ...,
 };
 
+export interface AdapterRegistry {
+  adapters: Record<string, SourceAdapter>;
+  shutdown(): Promise<void>;
+}
+
 /**
- * Load enabled adapters from config. TODO (Phase 4): implement secret
- * verification, config schema parse, init(ctx), and scheduler registration.
+ * Build the adapter registry from cortex.yaml. For each enabled adapter:
+ *   1. Look up its factory by `package` name
+ *   2. Validate its config block with the factory's own Zod schema
+ *   3. Verify every `requiredSecrets` entry is in the environment
+ *   4. Invoke `adapter.init(ctx)`
+ *
+ * Adapters that fail validation are logged and skipped — one bad adapter
+ * shouldn't take down the rest.
  */
 export async function buildAdapterRegistry(args: {
   cfg: CortexConfig;
+  env: Record<string, string | undefined>;
   logger: Logger;
-  buildContext: (adapterId: string) => AdapterContext;
-}): Promise<{ adapters: Record<string, SourceAdapter> }> {
-  const { cfg, logger } = args;
+  buildContext: (adapterId: string, entryConfig: Record<string, unknown>, secrets: Record<string, string>) => AdapterContext;
+}): Promise<AdapterRegistry> {
+  const { cfg, env, logger } = args;
   const adapters: Record<string, SourceAdapter> = {};
 
   for (const [id, entry] of Object.entries(cfg.adapters)) {
@@ -37,15 +54,66 @@ export async function buildAdapterRegistry(args: {
       logger.info("adapter.skipped", { id, reason: "disabled" });
       continue;
     }
+
     const factory = adapterFactories[entry.package];
     if (!factory) {
       logger.warn("adapter.unknown_package", { id, package: entry.package });
       continue;
     }
-    // TODO: validate entry.config against factory's configSchema,
-    // verify requiredSecrets, build context, call init.
-    logger.warn("adapter.registration_stubbed", { id });
+
+    try {
+      const adapter = factory();
+
+      // 1. Config shape
+      const parsedConfig = adapter.configSchema.parse(entry.config) as Record<
+        string,
+        unknown
+      >;
+
+      // 2. Required secrets
+      const secrets: Record<string, string> = {};
+      const missing: string[] = [];
+      for (const name of adapter.requiredSecrets) {
+        const val = env[name];
+        if (!val) missing.push(name);
+        else secrets[name] = val;
+      }
+      if (missing.length > 0) {
+        logger.warn("adapter.missing_secrets", { id, missing });
+        continue;
+      }
+
+      // 3. Context + init
+      const ctx = args.buildContext(id, parsedConfig, secrets);
+      await adapter.init(ctx);
+
+      adapters[id] = adapter;
+      logger.info("adapter.ready", {
+        id,
+        package: entry.package,
+        pipelines: [...adapter.pipelines],
+      });
+    } catch (err) {
+      logger.error("adapter.init_failed", {
+        id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
-  return { adapters };
+  return {
+    adapters,
+    async shutdown() {
+      for (const [id, adapter] of Object.entries(adapters)) {
+        try {
+          await adapter.shutdown();
+        } catch (err) {
+          logger.warn("adapter.shutdown_failed", {
+            id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    },
+  };
 }

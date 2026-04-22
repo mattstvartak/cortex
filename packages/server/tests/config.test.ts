@@ -21,6 +21,17 @@ describe("expandEnv", () => {
     expect(() => expandEnv("x: ${EMPTY_TEST}")).toThrow(/EMPTY_TEST/);
     delete process.env.EMPTY_TEST;
   });
+
+  it("skips ${VAR} references inside commented lines", () => {
+    const yaml = [
+      "llm:",
+      "  providers:",
+      "    # obsidian: { config: { vaultPath: \"${OBSIDIAN_VAULT_PATH}\" } }",
+      "    ollama: {}",
+    ].join("\n");
+    delete process.env.OBSIDIAN_VAULT_PATH;
+    expect(() => expandEnv(yaml)).not.toThrow();
+  });
 });
 
 describe("cortexConfigSchema", () => {

@@ -64,18 +64,46 @@ export async function startServer(): Promise<void> {
 
   const scheduler = createScheduler(logger);
 
-  // Adapter registry — empty in Phase 1/2.
-  await buildAdapterRegistry({
+  // Adapter registry — pulls enabled adapters from cortex.yaml and runs
+  // their init. For adapters that need live context (engram/persona/llm),
+  // we plug those in here. The scheduler (not yet live) will call
+  // runSync per adapter on its schedule.
+  const adapterRegistry = await buildAdapterRegistry({
     cfg,
+    env: process.env,
     logger,
-    buildContext: () => {
-      throw new Error("AdapterContext builder not implemented yet");
-    },
+    buildContext: (adapterId, entryConfig, secrets) => ({
+      logger: logger.child({ adapter: adapterId }),
+      config: entryConfig,
+      secrets,
+      signal: new AbortController().signal,
+      engram: {
+        ingest: (input) => engram.ingest(input),
+        healthCheck: () => engram.healthCheck(),
+      },
+      taxonomy,
+      llm: {
+        raw: router,
+        complete: async ({ task, prompt, system, maxTokens, temperature, signal }) => {
+          const res = await router.complete({
+            task,
+            messages: [
+              ...(system ? [{ role: "system" as const, content: system }] : []),
+              { role: "user" as const, content: prompt },
+            ],
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+            ...(temperature !== undefined ? { temperature } : {}),
+            ...(signal ? { signal } : {}),
+          });
+          return res.content;
+        },
+      },
+    }),
   });
+  logger.info("adapters.ready", { count: Object.keys(adapterRegistry.adapters).length });
 
   // Void-reference the pieces we don't consume from tools yet so TypeScript
   // doesn't complain and we keep them in the ownership tree for shutdown.
-  void router;
   void scheduler;
 
   const mcp = new Server(
@@ -156,6 +184,13 @@ export async function startServer(): Promise<void> {
       await persona.shutdown();
     } catch (err) {
       logger.warn("persona.shutdown.error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    try {
+      await adapterRegistry.shutdown();
+    } catch (err) {
+      logger.warn("adapters.shutdown.error", {
         error: err instanceof Error ? err.message : String(err),
       });
     }

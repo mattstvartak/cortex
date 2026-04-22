@@ -4,10 +4,13 @@ Canonical build order and current state. Update after every meaningful session.
 
 ## Current Phase
 
-**Phase 2: Project Taxonomy** — complete. Project/Person schemas, taxonomy
-loader, first two MCP tools, and real Engram + Persona MCP clients are all
-live. Cortex now spawns both upstream servers as subprocesses and wires
-them into every tool's context. Next: Phase 3 meeting pipeline on fixtures.
+**Phase 5 kickoff: Confluence adapter + pipeline-doc + sync CLI.**
+First real source adapter lives as `@cortex/adapter-confluence`, sharing
+a new `@cortex/pipeline-doc` that Notion/Jira/Google Drive/Obsidian will
+reuse. `cortex sync <adapter>` runs one adapter's full fetch → transform
+→ classify → pipeline → ingest cycle for manual testing. Confluence is
+disabled by default — flip `enabled: true` in `config/cortex.yaml`, add
+Atlassian creds to `.env`, and run `cortex sync confluence` to ingest.
 
 ## Phase 0: Setup (manual, pre-development)
 
@@ -109,11 +112,22 @@ tools. Briefs readable, action items listed, decisions preserved.
 
 ## Phase 5: Confluence Adapter
 
-- [ ] Atlassian API client with auth
-- [ ] Space inventory: discover what exists, what's active
-- [ ] Space-to-project mapping in config
-- [ ] Page sync: diff-based, track page versions
-- [ ] Chunking by heading hierarchy, preserve heading path as metadata
+- [x] Atlassian Cloud API v2 client with basic auth
+- [x] Space inventory via `/spaces`, page listing via `/pages` filtered by since
+- [x] Space-to-project rule-based classifier via `spaceToProject` config map
+- [x] Page sync with `sort=-modified-date` for incremental pulls
+- [x] Storage-format (XHTML) to markdown converter (headings, lists,
+      inline emphasis, code blocks, entity decoding)
+- [x] `@cortex/pipeline-doc` — chunk by heading hierarchy, one memory per
+      chunk, shared across Notion/Jira/Google Drive/Obsidian
+- [x] `cortex sync <adapter>` CLI for one-shot manual runs
+- [x] 8 adapter tests, 7 pipeline tests
+- [ ] LLM fallback classifier when no rule matches (deferred, needs
+      LLMClassifier plumbing)
+- [ ] Comment handling (comments are often where decisions actually live)
+- [ ] Attachment handling (PDFs at minimum via pdf extraction; skip images
+      for now)
+- [ ] Scheduler integration (so sync runs on schedule, not just on demand)
 - [ ] Page relationship graph (parents, children, links)
 - [ ] Comment handling (comments are often where decisions actually live)
 - [ ] Attachment handling (PDFs at minimum via pdf extraction; skip images
@@ -232,3 +246,9 @@ Record a one-line summary after each Claude Code session.
   SourceType + metadata schema expanded to include jira, linear, notion,
   google_drive, google_meet, github, teams. 32 tests total; live boot
   against @onenomad/engram-memory and @onenomad/persona-mcp confirmed.
+- 2026-04-21: Phase 5 kickoff. First source adapter: @cortex/adapter-confluence
+  (Atlassian Cloud v2, basic auth, storage→markdown converter, rule-based
+  space→project classifier). New @cortex/pipeline-doc (heading-based
+  chunker, shared across doc-shaped sources). `cortex sync` CLI runs one
+  adapter's full fetch→transform→classify→pipeline→ingest cycle.
+  Adapter registry now real, not stubbed. 48 tests total.

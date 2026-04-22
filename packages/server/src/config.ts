@@ -53,17 +53,26 @@ export async function loadCortexConfig(path: string): Promise<CortexConfig> {
  * a readable error listing every missing/empty variable so the user knows
  * which .env entry to fill in, rather than surfacing as an opaque Zod
  * validation error downstream.
+ *
+ * Lines starting with `#` are treated as YAML comments and left untouched,
+ * so commented-out config blocks don't require their env vars to be set.
  */
 export function expandEnv(text: string): string {
   const missing = new Set<string>();
-  const out = text.replace(/\$\{([A-Z0-9_]+)\}/g, (_match, name: string) => {
-    const val = process.env[name];
-    if (val === undefined || val === "") {
-      missing.add(name);
-      return "";
-    }
-    return val;
-  });
+  const lines = text.split(/\r?\n/);
+  const out = lines
+    .map((line) => {
+      if (/^\s*#/.test(line)) return line;
+      return line.replace(/\$\{([A-Z0-9_]+)\}/g, (_match, name: string) => {
+        const val = process.env[name];
+        if (val === undefined || val === "") {
+          missing.add(name);
+          return "";
+        }
+        return val;
+      });
+    })
+    .join("\n");
   if (missing.size > 0) {
     throw new Error(
       `config references unset environment variables: ${[...missing].join(", ")}. ` +

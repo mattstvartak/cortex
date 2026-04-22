@@ -12,7 +12,9 @@
     { "path": "../llm-core" },
     { "path": "../llm-sdk" },
     { "path": "../pipeline-core" },
+    { "path": "../pipeline-doc" },
     { "path": "../provider-ollama" },
-    { "path": "../provider-openrouter" }
+    { "path": "../provider-openrouter" },
+    { "path": "../adapter-confluence" }
   ]
 }
