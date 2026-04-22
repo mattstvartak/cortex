@@ -12,6 +12,7 @@
     { "path": "../llm-core" },
     { "path": "../llm-sdk" },
     { "path": "../pipeline-code" },
+    { "path": "../pipeline-conversation" },
     { "path": "../pipeline-core" },
     { "path": "../pipeline-doc" },
     { "path": "../pipeline-meeting" },
@@ -27,6 +28,7 @@
     { "path": "../adapter-linear" },
     { "path": "../adapter-loom" },
     { "path": "../adapter-notion" },
-    { "path": "../adapter-obsidian" }
+    { "path": "../adapter-obsidian" },
+    { "path": "../adapter-slack" }
   ]
 }

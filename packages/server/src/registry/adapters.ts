@@ -15,6 +15,7 @@ import { createAdapter as createLinearAdapter } from "@cortex/adapter-linear";
 import { createAdapter as createLoomAdapter } from "@cortex/adapter-loom";
 import { createAdapter as createNotionAdapter } from "@cortex/adapter-notion";
 import { createAdapter as createObsidianAdapter } from "@cortex/adapter-obsidian";
+import { createAdapter as createSlackAdapter } from "@cortex/adapter-slack";
 import type { CortexConfig } from "../config.js";
 
 /**
@@ -34,8 +35,7 @@ const adapterFactories: Record<string, AdapterFactory> = {
   "@cortex/adapter-loom": createLoomAdapter,
   "@cortex/adapter-notion": createNotionAdapter,
   "@cortex/adapter-obsidian": createObsidianAdapter,
-  // Future adapters, each in its own package:
-  // "@cortex/adapter-slack": createSlackAdapter,
+  "@cortex/adapter-slack": createSlackAdapter,
 };
 
 export interface AdapterRegistry {

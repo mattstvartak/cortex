@@ -150,5 +150,14 @@ adapters:
       repoToProject: {}
       defaultProject: ""
 
-  # Future adapters — each lands as its own package.
-  # slack:          { package: "@cortex/adapter-slack",          enabled: false }
+  slack:
+    package: "@cortex/adapter-slack"
+    enabled: false
+    schedule: "0 */2 * * *"
+    config:
+      workspace: "yourcompany"     # for URL building, e.g. yourcompany.slack.com
+      channels: []                 # channel ids; bot must be a member
+      historyDays: 7
+      maxThreadsPerRun: 100
+      channelToProject: {}
+      defaultProject: ""
