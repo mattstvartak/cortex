@@ -26,7 +26,7 @@ export function createResearchPipeline(
       ctx: PipelineContext,
     ): Promise<PipelineMemory[]> {
       const topicSlug = normalizeTopic(input.topic);
-      const baseMetadata = buildBaseMetadata(input, topicSlug);
+      const baseMetadata = buildBaseMetadata(input, topicSlug, ctx.traceId);
 
       // Pass 1: structural extraction from retrieved context.
       const extractPrompt = buildExtractPrompt(input, maxItemChars);
@@ -101,6 +101,7 @@ export function createResearchPipeline(
 function buildBaseMetadata(
   input: ResearchInput,
   topicSlug: string,
+  traceId: string | undefined,
 ): MemoryMetadata {
   const project: string | string[] = input.projects
     ? input.projects.length === 1
@@ -109,12 +110,11 @@ function buildBaseMetadata(
     : [];
   return {
     domain: "work",
-    // "cortex" isn't a SourceType — reference memories come from the
-    // user. Reuse "notion" as a stable stand-in? No — use the closest
-    // external surface: mark as "obsidian" (user-authored) until a
-    // dedicated source lands. Better to pick one. Using "obsidian" here
-    // would pollute vault-scoped queries. Instead, tag with a
-    // source-sentinel and lean on `type: reference` for retrieval.
+    // Reference memories are synthesized from the user's own
+    // retrieved context — there's no external source. "notion" is the
+    // closest stand-in for a curated surface; retrieval filters on
+    // `type: reference` + `tags: topic:*` so the source value doesn't
+    // collide with actual Notion ingest.
     source: "notion",
     source_id: `cortex:research:${topicSlug}`,
     source_url: `cortex://research/${encodeURIComponent(topicSlug)}`,
@@ -123,7 +123,13 @@ function buildBaseMetadata(
     people: input.requesterSlug ? [input.requesterSlug] : [],
     date: new Date().toISOString(),
     confidence: 0.85,
+    // Research output is unvetted until explicitly approved — see
+    // the `approve_research` tool.
+    sensitivity: "internal",
+    trust: "experimental",
+    status: "draft",
     tags: [`topic:${topicSlug}`],
+    ...(traceId ? { trace_id: traceId } : {}),
   };
 }
 

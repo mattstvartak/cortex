@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Logger, SourceAdapter } from "@cortex/core";
 import type { LLMRouter } from "@cortex/llm-core";
 import { createCodePipeline } from "@cortex/pipeline-code";
@@ -67,10 +68,17 @@ export async function runSync(args: {
   });
 
   const since = opts.sinceIso ? new Date(opts.sinceIso) : undefined;
+  // One correlation id for the whole sync run — every memory emitted by
+  // every pipeline invocation below stamps it, so operators can filter
+  // "what did the 15:00 Confluence run ingest" in one Engram query.
+  const traceId = randomUUID();
+  const scopedLogger = logger.child({ traceId, adapter: adapter.id });
+  scopedLogger.info("sync.run.trace", { adapter: adapter.id });
 
   const pipelineCtx = {
-    logger,
+    logger: scopedLogger,
     signal: new AbortController().signal,
+    traceId,
     llm: {
       async complete(req: {
         task: string;

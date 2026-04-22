@@ -1,3 +1,4 @@
+import { defaultTrustForSource } from "@cortex/core";
 import type {
   ClassifiedItem,
   MemoryMetadata,
@@ -37,7 +38,7 @@ export function createMeetingPipeline(
       ctx: PipelineContext,
     ): Promise<PipelineMemory[]> {
       const memories: PipelineMemory[] = [];
-      const baseMeta = buildBaseMetadata(input);
+      const baseMeta = buildBaseMetadata(input, ctx.traceId);
 
       // --- Pass 1: structural ---------------------------------------
       const pass1Tmpl = await loadPrompt("pass1-structural.md");
@@ -163,9 +164,13 @@ export function createMeetingPipeline(
   };
 }
 
-function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
+function buildBaseMetadata(
+  input: ClassifiedItem,
+  traceId: string | undefined,
+): MemoryMetadata {
   const project: string | string[] =
     input.projects.length === 1 ? input.projects[0]! : input.projects;
+  const trustDefaults = defaultTrustForSource(input.sourceType as SourceType);
   return {
     domain: "work",
     source: input.sourceType as SourceType,
@@ -176,7 +181,10 @@ function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
     people: input.authors,
     date: input.updatedAt.toISOString(),
     confidence: input.confidence,
+    sensitivity: trustDefaults.sensitivity,
+    trust: trustDefaults.trust,
     ...(input.title ? { title: input.title } : {}),
+    ...(traceId ? { trace_id: traceId } : {}),
   };
 }
 

@@ -1,3 +1,4 @@
+import { defaultTrustForSource } from "@cortex/core";
 import type {
   ClassifiedItem,
   MemoryMetadata,
@@ -32,12 +33,12 @@ export function createConversationPipeline(
 
     async run(
       input: ClassifiedItem,
-      _ctx: PipelineContext,
+      ctx: PipelineContext,
     ): Promise<PipelineMemory[]> {
       const messages = parseConversation(input.content);
       if (messages.length === 0) return [];
 
-      const baseMeta = buildBaseMetadata(input);
+      const baseMeta = buildBaseMetadata(input, ctx.traceId);
       const memories: PipelineMemory[] = [];
 
       // 1. Thread-level memory (always emit).
@@ -90,9 +91,13 @@ export function createConversationPipeline(
   };
 }
 
-function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
+function buildBaseMetadata(
+  input: ClassifiedItem,
+  traceId: string | undefined,
+): MemoryMetadata {
   const project: string | string[] =
     input.projects.length === 1 ? input.projects[0]! : input.projects;
+  const trustDefaults = defaultTrustForSource(input.sourceType as SourceType);
   return {
     domain: "work",
     source: input.sourceType as SourceType,
@@ -103,7 +108,10 @@ function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
     people: input.authors,
     date: input.updatedAt.toISOString(),
     confidence: input.confidence,
+    sensitivity: trustDefaults.sensitivity,
+    trust: trustDefaults.trust,
     ...(input.title ? { title: input.title } : {}),
+    ...(traceId ? { trace_id: traceId } : {}),
   };
 }
 

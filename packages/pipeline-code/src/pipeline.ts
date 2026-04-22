@@ -1,3 +1,4 @@
+import { defaultTrustForSource } from "@cortex/core";
 import type {
   ClassifiedItem,
   ContentType,
@@ -52,7 +53,7 @@ export function createCodePipeline(
       // don't feed PDFs / images / compiled artifacts into Engram.
       if (skipBinary && input.content.indexOf(NULL_BYTE) !== -1) return [];
 
-      const base = buildBaseMetadata(input, language);
+      const base = buildBaseMetadata(input, language, _ctx.traceId);
       const chunks = chunkCode(input.content, {
         language,
         maxChars: maxChunkChars,
@@ -91,9 +92,11 @@ export function createCodePipeline(
 function buildBaseMetadata(
   input: ClassifiedItem,
   language: string,
+  traceId: string | undefined,
 ): MemoryMetadata {
   const project: string | string[] =
     input.projects.length === 1 ? input.projects[0]! : input.projects;
+  const trustDefaults = defaultTrustForSource(input.sourceType as SourceType);
 
   return {
     domain: "work",
@@ -105,6 +108,9 @@ function buildBaseMetadata(
     people: input.authors,
     date: input.updatedAt.toISOString(),
     confidence: input.confidence,
+    sensitivity: trustDefaults.sensitivity,
+    trust: trustDefaults.trust,
     tags: [`language:${language}`],
+    ...(traceId ? { trace_id: traceId } : {}),
   };
 }

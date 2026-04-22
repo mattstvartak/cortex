@@ -1,3 +1,4 @@
+import { defaultTrustForSource } from "@cortex/core";
 import type { ClassifiedItem, MemoryMetadata } from "@cortex/core";
 import type {
   Pipeline,
@@ -32,9 +33,9 @@ export function createDocPipeline(
 
     async run(
       input: ClassifiedItem,
-      _ctx: PipelineContext,
+      ctx: PipelineContext,
     ): Promise<PipelineMemory[]> {
-      const baseMetadata = buildBaseMetadata(input);
+      const baseMetadata = buildBaseMetadata(input, ctx.traceId);
 
       const rawChunks = chunkByHeading(input.content);
       const chunks = mergeShortChunks(rawChunks, minChunkChars);
@@ -75,9 +76,13 @@ export function createDocPipeline(
   };
 }
 
-function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
+function buildBaseMetadata(
+  input: ClassifiedItem,
+  traceId: string | undefined,
+): MemoryMetadata {
   const project: string | string[] =
     input.projects.length === 1 ? input.projects[0]! : input.projects;
+  const trustDefaults = defaultTrustForSource(input.sourceType);
 
   return {
     domain: "work",
@@ -89,8 +94,11 @@ function buildBaseMetadata(input: ClassifiedItem): MemoryMetadata {
     people: input.authors,
     date: input.updatedAt.toISOString(),
     confidence: input.confidence,
+    sensitivity: trustDefaults.sensitivity,
+    trust: trustDefaults.trust,
     ...(input.title ? { title: input.title } : {}),
     ...(input.parentId ? { parent_id: input.parentId } : {}),
+    ...(traceId ? { trace_id: traceId } : {}),
   };
 }
 

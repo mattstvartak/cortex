@@ -102,6 +102,25 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Freeform secondary categorization."
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Correlation id set by the operation that produced this memory."
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": ["public", "internal", "confidential", "restricted"],
+      "description": "Sensitivity label — defaults come from the source type."
+    },
+    "trust": {
+      "type": "string",
+      "enum": ["approved", "experimental", "external"],
+      "description": "Trust bucket. Separate from sensitivity."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "in_review", "approved", "revoked"],
+      "description": "Lifecycle status for curated memories (references, decisions)."
     }
   }
 }

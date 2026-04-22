@@ -17,6 +17,12 @@ export interface ToolContext {
   /** Optional — only present when an LLM is configured. Tools should
    *  handle its absence gracefully (fall back to non-LLM output). */
   llmRouter?: LLMRouter;
+  /**
+   * Per-call correlation id, generated at the MCP tool-call boundary.
+   * Tools that persist memories should stamp it on metadata so audit
+   * trails can follow a user action through ingestion.
+   */
+  traceId?: string;
 }
 
 /**

@@ -97,6 +97,7 @@ export const research: McpTool<typeof inputSchema, Output> = {
     const pipelineCtx = {
       logger: ctx.logger,
       signal: new AbortController().signal,
+      ...(ctx.traceId ? { traceId: ctx.traceId } : {}),
       llm: {
         async complete(args: {
           task: string;

@@ -54,6 +54,37 @@ export const memoryMetadataSchema = z.object({
   title: z.string().optional(),
   parent_id: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  /**
+   * Correlation id set at the entry point of the operation that produced
+   * this memory (MCP tool call, scheduled sync run, manual CLI sync).
+   * Lets an operator trace "why does this memory exist" back through the
+   * ingestion pipeline in one search.
+   */
+  trace_id: z.string().optional(),
+  /**
+   * Sensitivity label — governs how broadly a memory can surface. Defaults
+   * come from the source type (see `defaultTrustForSource`) and can be
+   * overridden per-memory by the adapter / user.
+   */
+  sensitivity: z
+    .enum(["public", "internal", "confidential", "restricted"])
+    .optional(),
+  /**
+   * Trust bucket. Separate from `sensitivity` — answers "how reliable is
+   * this content" rather than "who may see it".
+   *
+   *   - "approved"     curated / signed-off reference material
+   *   - "experimental" raw ingest, not vetted (most adapter output lands here)
+   *   - "external"     third-party content; treat as untrusted input
+   */
+  trust: z.enum(["approved", "experimental", "external"]).optional(),
+  /**
+   * Lifecycle status for curation-worthy memories (reference briefs,
+   * decisions, action items). Ordinary ingested content leaves this unset.
+   */
+  status: z
+    .enum(["draft", "in_review", "approved", "revoked"])
+    .optional(),
 });
 
 export type MemoryMetadata = z.infer<typeof memoryMetadataSchema>;

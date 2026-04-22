@@ -40,6 +40,12 @@ export interface PipelineContext {
     }): Promise<string>;
   };
   signal: AbortSignal;
+  /**
+   * Correlation id for the operation that invoked this pipeline. Pipelines
+   * stamp it on every emitted memory so operators can trace ingestion
+   * end-to-end.
+   */
+  traceId?: string;
 }
 
 /**
