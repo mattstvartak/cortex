@@ -1,6 +1,13 @@
 import type { WizardModule } from "@cortex/core";
+import { bitbucketWizard } from "@cortex/adapter-bitbucket";
 import { confluenceWizard } from "@cortex/adapter-confluence";
+import { githubWizard } from "@cortex/adapter-github";
 import { jiraWizard } from "@cortex/adapter-jira";
+import { linearWizard } from "@cortex/adapter-linear";
+import { loomWizard } from "@cortex/adapter-loom";
+import { notionWizard } from "@cortex/adapter-notion";
+import { obsidianWizard } from "@cortex/adapter-obsidian";
+import { slackWizard } from "@cortex/adapter-slack";
 
 /**
  * Static registry of wizard specs known to the CLI.
@@ -9,8 +16,22 @@ import { jiraWizard } from "@cortex/adapter-jira";
  * `WizardModule` spec; we list them here explicitly (same ADR-009 pattern
  * as the adapter + provider registries). Listing here is the single place
  * new modules land when their wizards ship.
+ *
+ * Google stack (gmail, google-calendar, google-drive) is deferred —
+ * their wizards need an OAuth device-code flow rather than plain
+ * text/password prompts. Tracked for a Google-auth wizard sprint.
  */
-const WIZARDS: WizardModule[] = [confluenceWizard, jiraWizard];
+const WIZARDS: WizardModule[] = [
+  confluenceWizard,
+  jiraWizard,
+  bitbucketWizard,
+  githubWizard,
+  linearWizard,
+  loomWizard,
+  notionWizard,
+  obsidianWizard,
+  slackWizard,
+];
 
 const BY_ID = new Map<string, WizardModule>();
 for (const w of WIZARDS) BY_ID.set(w.id, w);
