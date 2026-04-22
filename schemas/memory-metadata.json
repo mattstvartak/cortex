@@ -70,7 +70,8 @@
         "digest",
         "conversation",
         "commit",
-        "event"
+        "event",
+        "reference"
       ]
     },
     "people": {

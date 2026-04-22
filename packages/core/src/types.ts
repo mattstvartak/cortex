@@ -40,7 +40,8 @@ export type ContentType =
   | "digest"
   | "conversation"
   | "commit"
-  | "event";
+  | "event"
+  | "reference";
 
 /**
  * A file/link attached to a normalized item. Optional; not every source has

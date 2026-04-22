@@ -16,17 +16,16 @@ and LLM provider is a standalone package — install only what you use.
 
 ## Status
 
-**Six MCP tools** live: `list_projects`, `get_project_context`,
-`catch_me_up`, `catch_me_up_on_meeting`, `my_action_items`, and
-`upcoming_briefs` (pre-meeting brief generation via the LLM router
-using ingested project context). **Twelve source adapters** shipped —
-Confluence, Jira, Linear, Loom, Notion, Obsidian, Google Calendar,
-Google Drive, Gmail, Bitbucket, GitHub, Slack. **Four pipelines**
-shipped — doc, meeting (3-pass), code, conversation. **Cron-based
-scheduler** runs every enabled adapter on its schedule inside
-`cortex start`. **LLM classifier fallback** — every adapter defers
-to an LLM scoring pass against `config/projects.yaml` when its
-rule-based match misses. 155 tests.
+**Seven MCP tools** live: `list_projects`, `get_project_context`,
+`catch_me_up`, `catch_me_up_on_meeting`, `my_action_items`,
+`upcoming_briefs`, and **`research`** (synthesizes reference memories
+about a topic from retrieved context — ADR-011). **Twelve source
+adapters** shipped — Confluence, Jira, Linear, Loom, Notion, Obsidian,
+Google Calendar, Google Drive, Gmail, Bitbucket, GitHub, Slack. **Five
+pipelines** shipped — doc, meeting (3-pass), code, conversation, and
+research (two-pass: extract → brief). **Cron-based scheduler** runs
+every enabled adapter on its schedule inside `cortex start`. **LLM
+classifier fallback** wired into every adapter. 159 tests.
 
 ## Install
 

@@ -281,6 +281,84 @@ llm:
   architecture. The defaults in cortex.yaml encode ADR-004's recommendation
   but no longer constrain the code.
 
+## ADR-011: Research feature as a pipeline + `type: "reference"` memories (2026-04-22)
+
+**Status**: Accepted
+
+**Context**: The user asks Cortex to "research X" or "become an expert
+in Y". This is fundamentally different from passive ingestion — it's
+*active* knowledge building on demand. Cortex needs a shape for
+storing synthesized expertise that doesn't look like a meeting brief
+or a source-specific memory.
+
+Three shapes were considered:
+
+1. **Ad-hoc note type.** Reuse `type: note` with a `research:` tag.
+   Rejected: collides with Obsidian's personal notes, loses the
+   distinction that reference material shouldn't decay (ADR-002).
+2. **Separate MCP tool with inline LLM calls.** Simple but makes the
+   research flow look different from every other ingestion. No code
+   reuse; testing becomes bespoke.
+3. **A new pipeline + new content type.** Matches the existing
+   pattern: source (the user's topic) → pipeline → memories. The
+   "source" is synthetic — the user's request — but the downstream
+   shape is identical to ingested docs.
+
+**Decision**: Go with (3).
+
+- **New content type**: `reference`. Added to `ContentType` in
+  `@cortex/core`, to `memoryMetadataSchema`, and to the JSON schema
+  at `schemas/memory-metadata.json`. Reference memories are intended
+  for the `reference` cognitive layer proposed upstream in ADR-002;
+  until Engram has that, they live in `semantic` with low decay.
+
+- **New pipeline**: `@cortex/pipeline-research`. Takes a `{topic,
+  retrievedContext[]}` input and emits:
+  - One `reference` memory holding the synthesized brief.
+  - N `reference` memories for the key facts/findings (one each,
+    deduped by normalized claim text).
+  - Optional `reference` memories for relevant source citations
+    carried through from the retrieved context.
+
+  Uses a two-pass LLM flow: pass 1 extracts structured facts from
+  retrieved context + the topic, pass 2 synthesizes a brief.
+
+- **New MCP tool**: `research(topic, depth?, sources?)`. Steps:
+  1. Query Engram for prior memories related to the topic.
+  2. Hand off to `pipeline-research` with that context.
+  3. Ingest pipeline output back into Engram with
+     `type: "reference"` and `tags: ["topic:<normalized>"]`.
+  4. Return the brief + findings count.
+
+- **Retrieval**: existing Engram semantic search surfaces `reference`
+  memories alongside other types for related queries automatically.
+  An explicit `what_do_i_know_about(topic)` tool can land later —
+  same shape as `catch_me_up` but filters `type: reference`.
+
+- **No external web in v1**. Retrieval uses only memories already
+  ingested (Confluence, Notion, Loom, etc.) plus whatever the user
+  passes inline via `sources`. Web fetching is a later enhancement
+  behind a new `@cortex/adapter-web` or similar — the research flow
+  doesn't have to be tied to its arrival.
+
+**Consequences**:
+
+- The user can say "research rate limiting strategies" and Cortex
+  pulls from ingested Confluence/Notion/Loom memories, synthesizes a
+  brief, and stores it. Next time someone asks a related question the
+  brief + findings surface automatically.
+- No new dependencies — `pipeline-research` reuses `@cortex/pipeline-core`
+  and the LLM router just like every other pipeline.
+- Reference material is finally distinguishable from transient content.
+  Retrieval-quality improves because search can filter on
+  `type: reference` to prefer curated over raw.
+- Tight coupling to ADR-002 (Engram reference layer). Until that ships,
+  we tag reference memories explicitly and adjust Engram decay params
+  for them as a short-term mitigation.
+- No Claude-tools-style recursive research in v1. That's a
+  meaningful next step once this ships; the pipeline shape accommodates
+  it (add a retrieval loop in pass 1).
+
 ---
 
 _Add new ADRs below this line._

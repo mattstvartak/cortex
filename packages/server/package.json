@@ -42,6 +42,7 @@
     "@cortex/pipeline-conversation": "workspace:*",
     "@cortex/pipeline-doc": "workspace:*",
     "@cortex/pipeline-meeting": "workspace:*",
+    "@cortex/pipeline-research": "workspace:*",
     "@cortex/provider-ollama": "workspace:*",
     "@cortex/provider-openrouter": "workspace:*",
     "@cortex/adapter-bitbucket": "workspace:*",

@@ -43,6 +43,7 @@ export const memoryMetadataSchema = z.object({
     "conversation",
     "commit",
     "event",
+    "reference",
   ]),
   /** Person slugs from config/people.yaml. May be empty. */
   people: z.array(z.string()),

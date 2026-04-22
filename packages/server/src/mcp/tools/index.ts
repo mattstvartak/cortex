@@ -4,6 +4,7 @@ import { catchMeUpOnMeeting } from "./catch-me-up-on-meeting.js";
 import { getProjectContext } from "./get-project-context.js";
 import { listProjects } from "./list-projects.js";
 import { myActionItems } from "./my-action-items.js";
+import { research } from "./research.js";
 import { upcomingBriefs } from "./upcoming-briefs.js";
 
 /**
@@ -17,4 +18,5 @@ export const ALL_TOOLS: AnyMcpTool[] = [
   catchMeUpOnMeeting,
   myActionItems,
   upcomingBriefs,
+  research,
 ];

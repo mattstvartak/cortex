@@ -16,6 +16,7 @@
     { "path": "../pipeline-core" },
     { "path": "../pipeline-doc" },
     { "path": "../pipeline-meeting" },
+    { "path": "../pipeline-research" },
     { "path": "../provider-ollama" },
     { "path": "../provider-openrouter" },
     { "path": "../adapter-bitbucket" },

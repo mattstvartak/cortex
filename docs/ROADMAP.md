@@ -4,15 +4,18 @@ Canonical build order and current state. Update after every meaningful session.
 
 ## Current Phase
 
-**Phase 6-8 tooling live.** Six MCP tools total: `list_projects`,
-`get_project_context`, `catch_me_up`, `catch_me_up_on_meeting`,
-`my_action_items`, `upcoming_briefs`. LLM classifier fallback wired
-into every adapter. Adapters run on cron inside `cortex start`. 155
-tests.
+**Research feature live (ADR-011).** Seven MCP tools total:
+`list_projects`, `get_project_context`, `catch_me_up`,
+`catch_me_up_on_meeting`, `my_action_items`, `upcoming_briefs`,
+`research`. New pipeline `@cortex/pipeline-research` (two-pass:
+extract findings → synthesize brief). New `type: "reference"` on
+`ContentType` + memory metadata schema. LLM classifier fallback
+wired into every adapter. Cron scheduler drives ingestion inside
+`cortex start`. 159 tests.
 
-Still outstanding: daily digest (Phase 7 UX, not yet — briefs cover
-most of it), research feature (ADR-011 still unwritten), and the
-Engram upstream `reference` cognitive layer (ADR-002 proposal).
+Still outstanding: Engram upstream `reference` cognitive layer (ADR-002
+proposal), web retrieval for the research pipeline, daily digest
+(Phase 7 UX — largely subsumed by briefs).
 
 ## Phase 0: Setup (manual, pre-development)
 
