@@ -147,7 +147,7 @@ export class ConfluenceAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const spaceKey =
       (item.rawMetadata.spaceKey as string | undefined) ?? undefined;
@@ -162,15 +162,7 @@ export class ConfluenceAdapter extends BaseAdapter {
       };
     }
 
-    // TODO Phase 3: fall back to @cortex/adapter-sdk's LLMClassifier when
-    // no rule matches. For now, surface as low-confidence unclassified so
-    // it shows up in a review queue instead of silently missing its project.
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, "")) };
   }
 }
 

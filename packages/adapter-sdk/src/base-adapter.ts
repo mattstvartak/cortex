@@ -9,6 +9,7 @@ import type {
   RawSourceItem,
   SourceAdapter,
 } from "@cortex/core";
+import { LLMClassifier } from "./classifier-llm.js";
 
 /**
  * Optional base class. Adapters MAY extend this for lifecycle scaffolding,
@@ -77,5 +78,49 @@ export abstract class BaseAdapter implements SourceAdapter {
 
   protected markSuccess(): void {
     this.lastSuccessAt = Date.now();
+  }
+
+  /**
+   * Fallback classification path for adapters whose rule didn't match.
+   *
+   * Resolution order:
+   *   1. LLM classifier — scored against the project taxonomy. When the
+   *      model returns a high-confidence slug, that wins.
+   *   2. `defaultProject` if the adapter config provides one — weak
+   *      signal ("inbox" style).
+   *   3. Unclassified — `{projects: [], confidence: 0}`. These items
+   *      land in a review queue rather than a silent miss.
+   *
+   * Adapters call this at the end of their own classify() when no rule
+   * matched.
+   */
+  protected async fallbackClassify(
+    item: NormalizedItem,
+    cctx: ClassificationContext,
+    defaultProject: string,
+  ): Promise<
+    Pick<ClassifiedItem, "projects" | "confidence" | "classificationMethod">
+  > {
+    const taxonomy = this.ctx?.taxonomy;
+    const llm = this.ctx?.llm;
+    if (taxonomy && llm && taxonomy.listProjects({ activeOnly: true }).length > 0) {
+      const classifier = new LLMClassifier({ taxonomy, llm });
+      const result = await classifier.classify(item, cctx);
+      if (result.projects.length > 0) return result;
+    }
+
+    if (defaultProject) {
+      return {
+        projects: [defaultProject],
+        confidence: 0.5,
+        classificationMethod: "rule",
+      };
+    }
+
+    return {
+      projects: [],
+      confidence: 0,
+      classificationMethod: "rule",
+    };
   }
 }

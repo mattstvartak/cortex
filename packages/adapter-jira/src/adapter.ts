@@ -151,7 +151,7 @@ export class JiraAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const projectKey = item.rawMetadata.projectKey as string | undefined;
     const mapped = projectKey ? this.cfg.projectToCortex[projectKey] : undefined;
@@ -163,12 +163,7 @@ export class JiraAdapter extends BaseAdapter {
         classificationMethod: "rule",
       };
     }
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, "")) };
   }
 
   private buildJql(since?: Date): string {

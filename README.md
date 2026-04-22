@@ -20,13 +20,12 @@ Two MCP tools live (`list_projects`, `get_project_context`). **Twelve
 source adapters** shipped — Confluence, Jira, Linear, Loom, Notion,
 Obsidian, Google Calendar, Google Drive, Gmail, Bitbucket, GitHub,
 Slack. Google adapters share `@cortex/google-auth` for OAuth. **Four
-pipelines** shipped — `@cortex/pipeline-doc`,
-`@cortex/pipeline-meeting` (3-pass: structural → synthesis → brief),
-`@cortex/pipeline-code` (per-file, language-aware), and
-`@cortex/pipeline-conversation` (threads → transcript + quote
-memories). **Cron-based scheduler** runs every enabled adapter on its
-configured schedule inside `cortex start` — no longer just via
-`cortex sync`. 140 tests.
+pipelines** shipped — doc, meeting (3-pass), code, conversation.
+**Cron-based scheduler** runs every enabled adapter on its schedule
+inside `cortex start`. **LLM classifier fallback** — every adapter
+defers to an LLM scoring pass against `config/projects.yaml` when
+its rule-based match misses, so mixed-scope sources (Slack, Gmail,
+Google Drive) don't leave everything unclassified. 147 tests.
 
 ## Install
 

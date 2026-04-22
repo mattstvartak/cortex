@@ -185,7 +185,7 @@ export class GmailAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const labels = (item.rawMetadata.labelIds as string[] | undefined) ?? [];
     for (const label of labels) {
@@ -199,20 +199,7 @@ export class GmailAdapter extends BaseAdapter {
         };
       }
     }
-    if (this.cfg.defaultProject) {
-      return {
-        ...item,
-        projects: [this.cfg.defaultProject],
-        confidence: 0.5,
-        classificationMethod: "rule",
-      };
-    }
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
 
   private buildQuery(since?: Date): string {

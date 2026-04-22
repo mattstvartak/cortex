@@ -142,7 +142,7 @@ export class ObsidianAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const relativePath = (item.rawMetadata.relativePath as string | undefined) ?? "";
     const frontmatter = (item.rawMetadata.frontmatter ?? {}) as Record<
@@ -180,21 +180,7 @@ export class ObsidianAdapter extends BaseAdapter {
       }
     }
 
-    if (this.cfg.defaultProject) {
-      return {
-        ...item,
-        projects: [this.cfg.defaultProject],
-        confidence: 0.5,
-        classificationMethod: "rule",
-      };
-    }
-
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "path-based",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
 }
 

@@ -153,7 +153,7 @@ export class SlackAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const channel = item.rawMetadata.channel as string | undefined;
     const mapped = channel ? this.cfg.channelToProject[channel] : undefined;
@@ -165,20 +165,7 @@ export class SlackAdapter extends BaseAdapter {
         classificationMethod: "rule",
       };
     }
-    if (this.cfg.defaultProject) {
-      return {
-        ...item,
-        projects: [this.cfg.defaultProject],
-        confidence: 0.5,
-        classificationMethod: "rule",
-      };
-    }
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
 
   private async resolveSpeakers(

@@ -159,7 +159,7 @@ export class LoomAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const folderId = item.rawMetadata.folderId as string | undefined;
     const mapped = folderId ? this.cfg.folderToProject[folderId] : undefined;
@@ -171,23 +171,7 @@ export class LoomAdapter extends BaseAdapter {
         classificationMethod: "rule",
       };
     }
-    if (this.cfg.defaultProject) {
-      return {
-        ...item,
-        projects: [this.cfg.defaultProject],
-        confidence: 0.5,
-        classificationMethod: "rule",
-      };
-    }
-    // No folder rule and no default — leave unclassified for the review
-    // queue. pipeline-meeting will still run and attach project: [] to
-    // every memory it emits.
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
 }
 

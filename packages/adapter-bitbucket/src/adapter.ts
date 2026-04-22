@@ -169,7 +169,7 @@ export class BitbucketAdapter extends BaseAdapter {
 
   async classify(
     item: NormalizedItem,
-    _ctx: ClassificationContext,
+    cctx: ClassificationContext,
   ): Promise<ClassifiedItem> {
     const repo = item.rawMetadata.repo as string | undefined;
     const mapped = repo ? this.cfg.repoToProject[repo] : undefined;
@@ -181,20 +181,7 @@ export class BitbucketAdapter extends BaseAdapter {
         classificationMethod: "rule",
       };
     }
-    if (this.cfg.defaultProject) {
-      return {
-        ...item,
-        projects: [this.cfg.defaultProject],
-        confidence: 0.5,
-        classificationMethod: "rule",
-      };
-    }
-    return {
-      ...item,
-      projects: [],
-      confidence: 0,
-      classificationMethod: "rule",
-    };
+    return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
 }
 
