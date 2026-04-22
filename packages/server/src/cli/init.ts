@@ -18,6 +18,9 @@ import {
 } from "./detect.js";
 import { writeConfig, type ProviderChoice } from "./write-config.js";
 import { runSmoke } from "./smoke.js";
+import { applyWizardResult } from "./config-mutation.js";
+import { runWizard } from "./wizard-runner.js";
+import { listWizards, wizardsByCategory } from "./wizard-registry.js";
 
 export interface InitArgs {
   args: readonly string[];
@@ -71,6 +74,11 @@ export async function runInit(_: InitArgs): Promise<number> {
       `  (previous cortex.yaml backed up to ${path.relative(repoRoot, result.configBackupPath)})`,
     );
   }
+
+  // 5a. Source adapter selection + per-module wizards. Each enabled module
+  //     writes to config/cortex.local.yaml (and .env + projects.local.yaml
+  //     as needed) via the shared config-mutation service.
+  await stepAdapters(repoRoot);
 
   // 6. Optional smoke test
   const shouldSmoke = await confirm({
@@ -371,6 +379,59 @@ async function stepDefaultTask(
   });
 
   return { provider: providerId, model };
+}
+
+async function stepAdapters(repoRoot: string): Promise<void> {
+  const byCategory = wizardsByCategory();
+  const adapterWizards = byCategory.get("adapter") ?? [];
+  if (adapterWizards.length === 0) {
+    return; // Nothing registered yet (Sprint A); skip cleanly.
+  }
+
+  section("Source adapters");
+  line(
+    "  Cortex ingests from the sources you enable. More wizards land " +
+      "as each adapter gets guided setup — the list will grow.",
+  );
+
+  const selected = await checkbox({
+    message: "Which adapters do you want to enable now?",
+    choices: adapterWizards.map((w) => ({
+      name: `${w.name} — ${w.description}`,
+      value: w.id,
+    })),
+    required: false,
+  });
+
+  for (const moduleId of selected) {
+    const wizard = adapterWizards.find((w) => w.id === moduleId);
+    if (!wizard) continue;
+    try {
+      const result = await runWizard(wizard);
+      const written = await applyWizardResult({ repoRoot }, result);
+      ok(`${wizard.name} configured`);
+      for (const p of written.filesWritten) {
+        line(`        ${path.relative(repoRoot, p)}`);
+      }
+    } catch (err) {
+      warn(
+        `${wizard.name} setup failed: ${err instanceof Error ? err.message : String(err)}. ` +
+          `You can re-run it later with \`cortex add ${moduleId}\`.`,
+      );
+    }
+  }
+
+  if (selected.length === 0) {
+    line(
+      "  Skipped. You can enable adapters later with `cortex add <module>` — " +
+        `list options via \`cortex modules\`.`,
+    );
+  }
+
+  // Unused helper reference to satisfy the listWizards import when the
+  // registry is empty. (kept so the import stays in case Sprint B adds
+  // a step that needs it.)
+  void listWizards;
 }
 
 // Lightweight formatters so we don't pull in chalk.

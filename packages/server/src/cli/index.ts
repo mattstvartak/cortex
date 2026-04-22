@@ -1,5 +1,11 @@
 import { autoLoadDotEnv } from "./dotenv.js";
 import { runInit } from "./init.js";
+import {
+  runAdd,
+  runConfigure,
+  runDisable,
+  runList,
+} from "./module-commands.js";
 import { runSmoke } from "./smoke.js";
 import { runStatus } from "./status.js";
 import { runSyncCli } from "./sync.js";
@@ -11,14 +17,20 @@ Usage:
   cortex <command> [options]
 
 Commands:
-  init                       Interactive setup wizard.
+  init                       Interactive setup wizard (first run).
   start                      Boot the Cortex MCP server over stdio.
   status                     Show daemon heartbeat (uptime, adapter stats).
   smoke                      Run a live LLM probe against every enabled provider.
   sync <adapter> [flags]     Run one adapter's full ingestion cycle once.
                                --since=ISO  only items updated after this date
                                --limit=N    cap items processed
-                               --dry-run    don't write to Engram
+                               --dry-run    don't write to memory
+
+  modules                    List all installable module wizards.
+  add <module>               Enable a module via guided wizard.
+  configure <module>         Re-run a module's wizard (current values as defaults).
+  disable <module>           Turn off an already-configured module.
+
   help                       Show this message.
 
 Environment:
@@ -59,6 +71,18 @@ export async function runCli(argv: string[]): Promise<number> {
 
     case "sync":
       return runSyncCli(rest);
+
+    case "modules":
+      return runList();
+
+    case "add":
+      return runAdd(rest);
+
+    case "configure":
+      return runConfigure(rest);
+
+    case "disable":
+      return runDisable(rest);
 
     case "start":
       await startServer();

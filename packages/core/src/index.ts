@@ -6,3 +6,4 @@ export * from "./metadata.js";
 export * from "./project.js";
 export * from "./person.js";
 export * from "./trust.js";
+export * from "./wizard.js";
