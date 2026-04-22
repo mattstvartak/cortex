@@ -1,4 +1,5 @@
 import { autoLoadDotEnv } from "./dotenv.js";
+import { runDoctor } from "./doctor.js";
 import { runGoogleLogin } from "./google-login.js";
 import { runInit } from "./init.js";
 import {
@@ -21,6 +22,7 @@ Commands:
   init                       Interactive setup wizard (first run).
   start                      Boot the Cortex MCP server over stdio.
   status                     Show daemon heartbeat (uptime, adapter stats).
+  doctor                     Pre-flight checks: config, secrets, tokens, taxonomy.
   smoke                      Run a live LLM probe against every enabled provider.
   sync <adapter> [flags]     Run one adapter's full ingestion cycle once.
                                --since=ISO  only items updated after this date
@@ -65,6 +67,9 @@ export async function runCli(argv: string[]): Promise<number> {
 
     case "init":
       return runInit({ args: rest });
+
+    case "doctor":
+      return runDoctor(rest);
 
     case "smoke":
       return runSmoke();

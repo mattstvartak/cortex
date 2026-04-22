@@ -102,9 +102,11 @@ adapters:
     package: "@cortex/adapter-obsidian"
     enabled: false
     config:
-      # vaultPath only resolves when this block is enabled; commented
-      # blocks are skipped by expandEnv regardless.
-      vaultPath: "${OBSIDIAN_VAULT_PATH}"
+      # Placeholder — `cortex add obsidian` writes the real path to
+      # cortex.local.yaml. A ${VAR} ref here would fail env expansion
+      # even while enabled: false, because the loader walks every
+      # non-comment line regardless of enabled state.
+      vaultPath: "./vault"
       pathToProject: []            # [{ prefix: "work/alpha/", project: project-alpha }]
       ignore: [".obsidian", ".trash", ".git", "node_modules"]
       defaultProject: ""
