@@ -122,6 +122,68 @@ describe("runDoctor", () => {
     );
   });
 
+  it("runs live probes behind --connect and FAILs on an unreachable engram binary", async () => {
+    const yaml = [
+      "llm:",
+      "  providers:",
+      "    ollama:",
+      '      package: "@cortex/provider-ollama"',
+      "      enabled: true",
+      "      config: { host: http://localhost:11434 }",
+      "  tasks:",
+      "    default: { provider: ollama, model: qwen3:14b }",
+      "  fallbackChain: []",
+      "adapters: {}",
+      "memory:",
+      "  primary: engram",
+      "  engram:",
+      "    command: cortex-doctor-bogus-engram-binary",
+      "webhooks: { enabled: false, host: 0.0.0.0, port: 4040 }",
+    ].join("\n");
+    const root = await makeRepo(yaml);
+    await withEnv(
+      { CORTEX_CONFIG_PATH: path.join(root, "config", "cortex.yaml") },
+      async () => {
+        const { code, stdout } = await captureOutput(() =>
+          runDoctor(["--connect"]),
+        );
+        expect(code).toBe(1);
+        expect(stdout).toMatch(/engram live probe/);
+        expect(stdout).toMatch(/\[FAIL\]/);
+      },
+    );
+  }, 30_000);
+
+  it("skips live probes when --connect is not passed", async () => {
+    const yaml = [
+      "llm:",
+      "  providers:",
+      "    ollama:",
+      '      package: "@cortex/provider-ollama"',
+      "      enabled: true",
+      "      config: { host: http://localhost:11434 }",
+      "  tasks:",
+      "    default: { provider: ollama, model: qwen3:14b }",
+      "  fallbackChain: []",
+      "adapters: {}",
+      "memory:",
+      "  primary: engram",
+      "  engram:",
+      "    command: cortex-doctor-bogus-engram-binary",
+      "webhooks: { enabled: false, host: 0.0.0.0, port: 4040 }",
+    ].join("\n");
+    const root = await makeRepo(yaml);
+    await withEnv(
+      { CORTEX_CONFIG_PATH: path.join(root, "config", "cortex.yaml") },
+      async () => {
+        const { code, stdout } = await captureOutput(() => runDoctor([]));
+        expect(code).toBe(0);
+        expect(stdout).not.toMatch(/engram live probe/);
+        expect(stdout).not.toMatch(/pgvector live probe/);
+      },
+    );
+  });
+
   it("reports env refs as FAIL when the referenced var is unset", async () => {
     const yaml = [
       "llm:",

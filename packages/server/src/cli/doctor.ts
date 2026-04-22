@@ -5,10 +5,13 @@ import {
   defaultTokenPath,
   readGoogleToken,
 } from "@cortex/google-auth";
+import type { Logger } from "@cortex/core";
+import { createPgPool } from "@cortex/memory-pgvector";
 import {
   resolveLocalFirst,
   type CortexConfig,
 } from "../config.js";
+import { createEngramClient } from "../clients/engram.js";
 
 /**
  * `cortex doctor` — pre-flight diagnostic. Runs mechanical checks without
@@ -56,7 +59,8 @@ const GOOGLE_ID_TO_SCOPE: Record<string, string> = {
   "google-drive": "https://www.googleapis.com/auth/drive.readonly",
 };
 
-export async function runDoctor(_args: readonly string[]): Promise<number> {
+export async function runDoctor(args: readonly string[]): Promise<number> {
+  const connect = args.includes("--connect");
   const results: CheckResult[] = [];
 
   const cfgPath =
@@ -270,7 +274,168 @@ export async function runDoctor(_args: readonly string[]): Promise<number> {
     }
   }
 
+  // 9. Live probes (opt-in: `cortex doctor --connect`). The checks above are
+  //    mechanical; --connect actually talks to Engram and Postgres.
+  if (connect) {
+    const memCfg = (cfg?.memory ?? {}) as {
+      primary?: string;
+      fallback?: string;
+      pgvector?: { connectionString?: string };
+      engram?: { command?: string; args?: string[]; env?: Record<string, string> };
+    };
+    const primary = memCfg.primary ?? "engram";
+    const fallback = memCfg.fallback;
+    const usesEngram = primary === "engram" || fallback === "engram";
+    const usesPgvector = primary === "pgvector" || fallback === "pgvector";
+
+    if (usesEngram) {
+      results.push(await probeEngram(memCfg.engram ?? {}));
+    } else {
+      results.push({
+        name: "engram live probe",
+        verdict: "skip",
+        detail: "engram not configured as primary or fallback",
+      });
+    }
+
+    if (usesPgvector) {
+      const dsn = memCfg.pgvector?.connectionString;
+      if (!dsn || dsn.includes("${")) {
+        results.push({
+          name: "pgvector live probe",
+          verdict: "skip",
+          detail: "DSN unresolved — see earlier check",
+        });
+      } else {
+        results.push(await probePgvector(dsn));
+      }
+    } else {
+      results.push({
+        name: "pgvector live probe",
+        verdict: "skip",
+        detail: "pgvector not configured as primary or fallback",
+      });
+    }
+  }
+
   return renderAndReturn(results, resolvedCfg);
+}
+
+/**
+ * Spawn the Engram MCP subprocess, call `memory_stats`, shut it down.
+ * Wrapped in a 15s budget because cold starts on Windows (spawn + import
+ * graph + LanceDB open) can take several seconds; anything longer than
+ * that is genuinely broken, not slow.
+ */
+async function probeEngram(
+  engram: { command?: string; args?: string[]; env?: Record<string, string> },
+): Promise<CheckResult> {
+  const logger = silentLogger();
+  const name = "engram live probe";
+  const started = Date.now();
+
+  try {
+    const client = await withTimeout(
+      createEngramClient({
+        logger,
+        ...(engram.command ? { command: engram.command } : {}),
+        ...(engram.args && engram.args.length > 0 ? { args: engram.args } : {}),
+        ...(engram.env && Object.keys(engram.env).length > 0
+          ? { env: engram.env }
+          : {}),
+      }),
+      15_000,
+      "engram spawn/connect",
+    );
+
+    try {
+      const health = await withTimeout(client.healthCheck(), 10_000, "engram healthCheck");
+      const ms = Date.now() - started;
+      if (health.healthy) {
+        return {
+          name,
+          verdict: "ok",
+          detail: `round-trip ${ms}ms via memory_stats`,
+        };
+      }
+      return {
+        name,
+        verdict: "fail",
+        detail: health.message || "healthcheck returned unhealthy",
+      };
+    } finally {
+      await client.shutdown().catch(() => undefined);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const hint = /ENOENT|not found|spawn/i.test(msg)
+      ? " — is @onenomad/engram-memory installed globally?"
+      : "";
+    return { name, verdict: "fail", detail: `${msg}${hint}` };
+  }
+}
+
+/**
+ * Open a pg Pool against the configured DSN and run `SELECT 1`. Keeps the
+ * connect + query budget under 5s so a wrong DSN doesn't hang doctor.
+ */
+async function probePgvector(dsn: string): Promise<CheckResult> {
+  const name = "pgvector live probe";
+  const started = Date.now();
+  const pool = createPgPool({
+    connectionString: dsn,
+    connectionTimeoutMillis: 5_000,
+  });
+  try {
+    await withTimeout(
+      pool.query<{ ok: number }>("SELECT 1 AS ok"),
+      5_000,
+      "pgvector SELECT 1",
+    );
+    const ms = Date.now() - started;
+    return { name, verdict: "ok", detail: `SELECT 1 round-trip ${ms}ms` };
+  } catch (err) {
+    return {
+      name,
+      verdict: "fail",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    await pool.end?.().catch(() => undefined);
+  }
+}
+
+function silentLogger(): Logger {
+  const noop = (): void => undefined;
+  const logger: Logger = {
+    debug: noop,
+    info: noop,
+    warn: noop,
+    error: noop,
+    child: () => logger,
+  };
+  return logger;
+}
+
+async function withTimeout<T>(
+  p: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${ms}ms`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function tryRead(p: string): Promise<string | undefined> {

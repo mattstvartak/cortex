@@ -22,7 +22,8 @@ Commands:
   init                       Interactive setup wizard (first run).
   start                      Boot the Cortex MCP server over stdio.
   status                     Show daemon heartbeat (uptime, adapter stats).
-  doctor                     Pre-flight checks: config, secrets, tokens, taxonomy.
+  doctor [--connect]         Pre-flight checks: config, secrets, tokens, taxonomy.
+                               --connect also probes Engram + Postgres live.
   smoke                      Run a live LLM probe against every enabled provider.
   sync <adapter> [flags]     Run one adapter's full ingestion cycle once.
                                --since=ISO  only items updated after this date
