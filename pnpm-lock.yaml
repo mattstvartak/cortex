@@ -83,6 +83,31 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.17)
 
+  packages/adapter-linear:
+    dependencies:
+      '@cortex/adapter-sdk':
+        specifier: workspace:*
+        version: link:../adapter-sdk
+      '@cortex/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      eslint:
+        specifier: ^9.12.0
+        version: 9.39.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)
+
   packages/adapter-notion:
     dependencies:
       '@cortex/adapter-sdk':
@@ -262,6 +287,28 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.17)
 
+  packages/pipeline-meeting:
+    dependencies:
+      '@cortex/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cortex/pipeline-core':
+        specifier: workspace:*
+        version: link:../pipeline-core
+    devDependencies:
+      eslint:
+        specifier: ^9.12.0
+        version: 9.39.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.17)
+
   packages/provider-ollama:
     dependencies:
       '@cortex/core':
@@ -326,6 +373,9 @@ importers:
       '@cortex/adapter-jira':
         specifier: workspace:*
         version: link:../adapter-jira
+      '@cortex/adapter-linear':
+        specifier: workspace:*
+        version: link:../adapter-linear
       '@cortex/adapter-notion':
         specifier: workspace:*
         version: link:../adapter-notion
@@ -350,6 +400,9 @@ importers:
       '@cortex/pipeline-doc':
         specifier: workspace:*
         version: link:../pipeline-doc
+      '@cortex/pipeline-meeting':
+        specifier: workspace:*
+        version: link:../pipeline-meeting
       '@cortex/provider-ollama':
         specifier: workspace:*
         version: link:../provider-ollama

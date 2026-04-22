@@ -1,5 +1,7 @@
 import type { Logger, SourceAdapter } from "@cortex/core";
+import type { LLMRouter } from "@cortex/llm-core";
 import { createDocPipeline } from "@cortex/pipeline-doc";
+import { createMeetingPipeline } from "@cortex/pipeline-meeting";
 import type { EngramClient } from "./clients/engram.js";
 
 export interface SyncOptions {
@@ -27,16 +29,18 @@ export interface SyncResult {
  * (`cortex sync <adapter-id>`) and — eventually — the scheduler.
  *
  * Pipelines are looked up by the id the adapter declared. Keeping this
- * map inline means adding a new pipeline package means one import here
+ * map inline means adding a new pipeline package is one import here
  * plus whatever the adapter lists; no magic registry.
  */
 export async function runSync(args: {
   adapter: SourceAdapter;
   engram: EngramClient;
   logger: Logger;
+  /** Optional — pipelines that need LLM access require this. */
+  llmRouter?: LLMRouter;
   opts?: SyncOptions;
 }): Promise<SyncResult> {
-  const { adapter, engram, logger } = args;
+  const { adapter, engram, logger, llmRouter } = args;
   const opts = args.opts ?? {};
   const limit = opts.limit ?? 0;
 
@@ -50,9 +54,11 @@ export async function runSync(args: {
     errors: 0,
   };
 
-  // Build the pipelines this adapter declared.
+  // Build the pipelines this adapter declared. Add new pipelines here
+  // when their packages land.
   const pipelines = adapter.pipelines.map((id) => {
     if (id === "@cortex/pipeline-doc") return createDocPipeline();
+    if (id === "@cortex/pipeline-meeting") return createMeetingPipeline();
     throw new Error(`Unknown pipeline '${id}'. Register it in sync.ts.`);
   });
 
@@ -61,11 +67,32 @@ export async function runSync(args: {
   const pipelineCtx = {
     logger,
     signal: new AbortController().signal,
-    // Pipelines currently only need logger + signal. LLM access will be
-    // wired in once pipeline-doc gains an extract stage.
     llm: {
-      async complete() {
-        throw new Error("LLM not wired into sync pipelines yet");
+      async complete(req: {
+        task: string;
+        prompt: string;
+        system?: string;
+        maxTokens?: number;
+        temperature?: number;
+        signal?: AbortSignal;
+      }): Promise<string> {
+        if (!llmRouter) {
+          throw new Error(
+            "sync: pipeline asked for LLM but no router was provided " +
+              "to runSync. Pass `llmRouter` in the args.",
+          );
+        }
+        const res = await llmRouter.complete({
+          task: req.task,
+          messages: [
+            ...(req.system ? [{ role: "system" as const, content: req.system }] : []),
+            { role: "user" as const, content: req.prompt },
+          ],
+          ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),
+          ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+          ...(req.signal ? { signal: req.signal } : {}),
+        });
+        return res.content;
       },
     },
   };

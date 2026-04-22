@@ -41,6 +41,17 @@ adapters:
       maxIssuesPerRun: 0
       projectToCortex: {}          # e.g. { ENG: engineering }
 
+  linear:
+    package: "@cortex/adapter-linear"
+    enabled: false
+    schedule: "0 */3 * * *"
+    config:
+      teams: []                    # Linear team keys, e.g. [ENG, DESIGN]
+      pageSize: 50
+      maxIssuesPerRun: 0
+      teamToProject: {}            # e.g. { ENG: engineering }
+      defaultProject: ""
+
   notion:
     package: "@cortex/adapter-notion"
     enabled: false
@@ -73,4 +84,3 @@ adapters:
   # google-calendar:{ package: "@cortex/adapter-google-calendar",enabled: false }
   # gmail:          { package: "@cortex/adapter-gmail",          enabled: false }
   # slack:          { package: "@cortex/adapter-slack",          enabled: false }
-  # linear:         { package: "@cortex/adapter-linear",         enabled: false }

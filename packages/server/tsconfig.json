@@ -13,10 +13,12 @@
     { "path": "../llm-sdk" },
     { "path": "../pipeline-core" },
     { "path": "../pipeline-doc" },
+    { "path": "../pipeline-meeting" },
     { "path": "../provider-ollama" },
     { "path": "../provider-openrouter" },
     { "path": "../adapter-confluence" },
     { "path": "../adapter-jira" },
+    { "path": "../adapter-linear" },
     { "path": "../adapter-notion" },
     { "path": "../adapter-obsidian" }
   ]

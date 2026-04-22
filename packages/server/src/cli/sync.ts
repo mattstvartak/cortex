@@ -3,6 +3,7 @@ import type { AdapterContext } from "@cortex/core";
 import { loadCortexConfig } from "../config.js";
 import { createLogger } from "../logger.js";
 import { buildAdapterRegistry } from "../registry/adapters.js";
+import { buildLLMRouter } from "../registry/providers.js";
 import { createEngramClient } from "../clients/engram.js";
 import { runSync } from "../sync.js";
 
@@ -74,6 +75,14 @@ export async function runSyncCli(argv: readonly string[]): Promise<number> {
 
   const engram = await createEngramClient({ logger });
 
+  // Build LLM router up front — pipelines that need it (pipeline-meeting,
+  // future LLM classifiers) get it; adapters that don't just ignore it.
+  const { router: llmRouter } = await buildLLMRouter({
+    cfg,
+    env: process.env,
+    logger,
+  });
+
   const registry = await buildAdapterRegistry({
     cfg: trimmedCfg,
     env: process.env,
@@ -83,17 +92,27 @@ export async function runSyncCli(argv: readonly string[]): Promise<number> {
       config: entryConfig,
       secrets,
       signal: new AbortController().signal,
-      // Pipelines use `engram` directly via `runSync`, but the adapter
-      // context also gets one for any direct adapter-side queries.
       engram: {
         ingest: (input) => engram.ingest(input),
         healthCheck: () => engram.healthCheck(),
       },
-      // Minimal taxonomy + LLM stubs; real classification uses adapter's
-      // own rules for now. We'll richen this when classifiers need the
-      // taxonomy.
       taxonomy: emptyTaxonomyReader(),
-      llm: { raw: null, complete: async () => { throw new Error("not wired"); } },
+      llm: {
+        raw: llmRouter,
+        complete: async ({ task, prompt, system, maxTokens, temperature, signal }) => {
+          const res = await llmRouter.complete({
+            task,
+            messages: [
+              ...(system ? [{ role: "system" as const, content: system }] : []),
+              { role: "user" as const, content: prompt },
+            ],
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+            ...(temperature !== undefined ? { temperature } : {}),
+            ...(signal ? { signal } : {}),
+          });
+          return res.content;
+        },
+      },
     }),
   });
 
@@ -111,6 +130,7 @@ export async function runSyncCli(argv: readonly string[]): Promise<number> {
       adapter,
       engram,
       logger,
+      llmRouter,
       opts: {
         ...(parsed.sinceIso ? { sinceIso: parsed.sinceIso } : {}),
         ...(parsed.limit !== undefined ? { limit: parsed.limit } : {}),

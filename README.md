@@ -16,11 +16,14 @@ and LLM provider is a standalone package — install only what you use.
 
 ## Status
 
-Two MCP tools live (`list_projects`, `get_project_context`) and four
-source adapters shipped — Confluence, Jira, Notion, Obsidian. All share
-`@cortex/pipeline-doc`. 71 tests, `cortex sync <adapter>` runs a full
-ingestion cycle on demand. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for
-what's next.
+Two MCP tools live (`list_projects`, `get_project_context`). Five source
+adapters shipped — Confluence, Jira, Linear, Notion, Obsidian — all
+sharing `@cortex/pipeline-doc`. The 3-pass meeting extraction pipeline
+(`@cortex/pipeline-meeting`) is live with prompts as `.md` files; Loom
+adapter slots on next. 83 tests. `cortex sync <adapter>` runs a full
+ingestion cycle on demand — the LLM router is now wired in, so any
+adapter that declares pipeline-meeting runs end-to-end. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next.
 
 ## Install
 
@@ -73,10 +76,10 @@ cortex help
 |---|---|---|---|
 | `@cortex/adapter-confluence` | ✅ shipped | Atlassian token | `pipeline-doc` |
 | `@cortex/adapter-jira` | ✅ shipped | Atlassian token (same) | `pipeline-doc` |
+| `@cortex/adapter-linear` | ✅ shipped | `LINEAR_API_KEY` | `pipeline-doc` |
 | `@cortex/adapter-notion` | ✅ shipped | `NOTION_API_KEY` | `pipeline-doc` |
 | `@cortex/adapter-obsidian` | ✅ shipped | (filesystem) | `pipeline-doc` |
-| `@cortex/adapter-linear` | planned | Linear API key | `pipeline-doc` |
-| `@cortex/adapter-loom` | planned | Loom API key | `pipeline-meeting` |
+| `@cortex/adapter-loom` | next up | `LOOM_API_KEY` | `pipeline-meeting` ✅ ready |
 | `@cortex/adapter-google-calendar` | planned | Google OAuth | `pipeline-event` |
 | `@cortex/adapter-google-drive` | planned | Google OAuth | `pipeline-doc` |
 | `@cortex/adapter-gmail` | planned | Google OAuth | `pipeline-email` |
@@ -162,7 +165,8 @@ Cortex MCP server
        │
        ├── Pipelines             (shape-specific, reusable)
        │     ├── @cortex/pipeline-doc       ✅  (prose → chunked memories)
-       │     └── (future: pipeline-meeting, pipeline-code, pipeline-conversation)
+       │     ├── @cortex/pipeline-meeting   ✅  (3-pass: structural → synthesis → brief)
+       │     └── (future: pipeline-code, pipeline-conversation, pipeline-event)
        │
        └── Upstream MCP clients
              ├── @onenomad/engram-memory    (spawned as stdio subprocess)
