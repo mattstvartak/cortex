@@ -16,16 +16,22 @@ and LLM provider is a standalone package — install only what you use.
 
 ## Status
 
-**Nine MCP tools** live: `list_projects`, `get_project_context`,
+**Ten MCP tools** live: `list_projects`, `get_project_context`,
 `catch_me_up`, `catch_me_up_on_meeting`, `my_action_items`,
-`upcoming_briefs`, `research`, `list_unclassified` (classifier review
-queue), and `todays_digest` (composite morning view). **Twelve source
+`upcoming_briefs`, `research`, `approve_research` (draft / in_review /
+approved / revoked), `list_unclassified` (classifier review queue),
+and `todays_digest` (composite morning view). **Twelve source
 adapters** shipped — Confluence, Jira, Linear, Loom, Notion, Obsidian,
 Google Calendar, Google Drive, Gmail, Bitbucket, GitHub, Slack. **Five
 pipelines** shipped — doc, meeting (3-pass), code, conversation, and
-research (two-pass: extract → brief). **Cron-based scheduler** runs
-every enabled adapter on its schedule inside `cortex start`. **LLM
-classifier fallback** wired into every adapter. 165 tests.
+research (two-pass: extract → brief). **Pluggable memory backend** —
+Engram primary, `@cortex/memory-pgvector` as a native
+hybrid-search fallback (Postgres + pgvector + tsvector, fused via RRF).
+**Cron-based scheduler** runs every enabled adapter on its schedule
+inside `cortex start`, reporting per-adapter run stats to a heartbeat
+file readable via `cortex status`. **LLM classifier fallback** wired
+into every adapter. **Memory governance metadata** — `trust`,
+`sensitivity`, `status`, `trace_id` stamped on every ingest. 202 tests.
 
 ## Install
 
@@ -64,11 +70,12 @@ The wizard:
 ```bash
 cortex init                 # interactive setup wizard
 cortex start                # boot the MCP server over stdio
+cortex status               # daemon heartbeat (uptime, per-adapter stats)
 cortex smoke                # live probe of every enabled LLM provider
 cortex sync <adapter>       # run one adapter's full ingestion cycle
   --since=ISO                 only items updated after this date
   --limit=N                   cap items processed
-  --dry-run                   don't write to Engram
+  --dry-run                   don't write to memory
 cortex help
 ```
 
@@ -116,15 +123,42 @@ flags to actually ingest.
 
 Pluggable — toggle between local Ollama, OpenRouter, or BYOK direct
 providers (Anthropic/OpenAI/Google) per-task via
-`config/cortex.yaml > llm.tasks`. See [ADR-010](docs/DECISIONS.md).
+`config/cortex.yaml > llm.tasks`. Task purposes: `default`,
+`structural`, `synthesis`, `brief`, `classify`, `embed`. See
+[ADR-010](docs/DECISIONS.md).
 
 Current provider packages:
 
-- `@cortex/provider-ollama` — local (Ollama, any model it supports; `think: false` by default)
+- `@cortex/provider-ollama` — local (Ollama, any model it supports;
+  `think: false` by default; `/api/embed` for embedding tasks)
 - `@cortex/provider-openrouter` — BYOK cloud aggregator
 
 Future: `@cortex/provider-anthropic`, `@cortex/provider-openai`,
 `@cortex/provider-google` for direct-provider BYOK.
+
+## Memory backend
+
+Engram is the primary memory store. For deployments without Engram —
+or for a safety net when the Engram subprocess is down —
+`@cortex/memory-pgvector` provides a native hybrid-search backend
+(Postgres + `pgvector` HNSW + `tsvector` GIN, fused via reciprocal
+rank fusion). Both expose the same ingest/search/health contract, so
+tools don't care which one answers.
+
+Enable it in `config/cortex.yaml`:
+
+```yaml
+memory:
+  primary: engram
+  fallback: pgvector
+  pgvector:
+    connectionString: "${POSTGRES_URL}"
+    embeddingDim: 768          # must match the model bound to llm.tasks.embed
+```
+
+At boot Cortex health-checks the primary; if it's unreachable the
+whole session runs on the fallback (logged; no runtime per-call
+switch). See [ADR-012](docs/DECISIONS.md).
 
 ## Connect to Claude Code
 
@@ -141,8 +175,8 @@ Add this to your Claude Code MCP config:
 }
 ```
 
-Reload Claude Code. `cortex` should appear in `/mcp` with the two tools
-currently shipped.
+Reload Claude Code. `cortex` should appear in `/mcp` with all ten
+tools currently shipped.
 
 ## Architecture
 
@@ -176,18 +210,23 @@ Cortex MCP server
        │     ├── @cortex/pipeline-doc           ✅  (prose → chunked memories)
        │     ├── @cortex/pipeline-meeting       ✅  (3-pass: structural → synthesis → brief)
        │     ├── @cortex/pipeline-code          ✅  (per-file, language-aware chunking)
-       │     └── @cortex/pipeline-conversation  ✅  (chat threads → transcript + quotes)
+       │     ├── @cortex/pipeline-conversation  ✅  (chat threads → transcript + quotes)
+       │     └── @cortex/pipeline-research      ✅  (topic → reference brief + findings)
+       │
+       ├── Memory backend        (pluggable — engram or pgvector)
+       │     ├── @onenomad/engram-memory     (spawned as stdio subprocess — primary)
+       │     └── @cortex/memory-pgvector     (Postgres + pgvector — native fallback)
        │
        └── Upstream MCP clients
-             ├── @onenomad/engram-memory    (spawned as stdio subprocess)
-             └── @onenomad/persona-mcp      (spawned as stdio subprocess)
+             └── @onenomad/persona-mcp       (spawned as stdio subprocess)
 ```
 
 Every adapter implements the same `SourceAdapter` contract. Every LLM
 provider implements the same `LLMProvider` contract. Every pipeline
-implements the same `Pipeline` contract. All three layers are loaded
-from config at startup, so swapping or disabling any piece is a config
-edit — not a code change.
+implements the same `Pipeline` contract. Engram and pgvector both
+implement the same `MemoryBackend` contract. All four layers are
+loaded from config at startup, so swapping or disabling any piece is
+a config edit — not a code change.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full story
 including the 3-pass meeting extraction pipeline, classification
@@ -198,7 +237,7 @@ strategy, and failure-mode handling.
 ```bash
 pnpm install              # install all workspace deps
 pnpm typecheck            # tsc --build across the monorepo
-pnpm test                 # unit tests (71 and counting)
+pnpm test                 # unit tests (202 and counting)
 pnpm dev                  # run `cortex start` in watch mode
 pnpm smoke                # live provider smoke test
 ```
