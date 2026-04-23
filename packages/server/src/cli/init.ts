@@ -21,6 +21,13 @@ import { runSmoke } from "./smoke.js";
 import { applyWizardResult } from "./config-mutation.js";
 import { runWizard } from "./wizard-runner.js";
 import { listWizards, wizardsByCategory } from "./wizard-registry.js";
+import {
+  createWorkspace,
+  findWorkspace,
+  getActiveWorkspace,
+  switchWorkspace,
+  validateSlug,
+} from "./workspace/manager.js";
 
 export interface InitArgs {
   args: readonly string[];
@@ -39,6 +46,11 @@ export async function runInit(_: InitArgs): Promise<number> {
 
   header("Cortex setup");
 
+  // 0. Workspace selection — every install gets at least one workspace
+  //    so config + .env + memory state are isolated from any other
+  //    context the user may want to manage later.
+  const writeRoot = await stepWorkspace(repoRoot);
+
   // 1. Engram + Persona
   await stepDependencies();
 
@@ -55,30 +67,29 @@ export async function runInit(_: InitArgs): Promise<number> {
   // 4. Default task binding
   const defaultTask = await stepDefaultTask(providers);
 
-  // 5. Write files
+  // 5. Write files — goes into the active workspace's directory if one
+  //    was selected in step 0, otherwise falls back to the repo root.
   const result = await writeConfig({
-    repoRoot,
+    repoRoot: writeRoot,
     providers,
     defaultTask,
     secrets,
   });
 
   section("Wrote");
-  line(`  ${path.relative(repoRoot, result.envPath)}`);
-  line(`  ${path.relative(repoRoot, result.configPath)}`);
+  line(`  ${result.envPath}`);
+  line(`  ${result.configPath}`);
   if (result.envBackupPath) {
-    line(`  (previous .env backed up to ${path.relative(repoRoot, result.envBackupPath)})`);
+    line(`  (previous .env backed up to ${result.envBackupPath})`);
   }
   if (result.configBackupPath) {
-    line(
-      `  (previous cortex.yaml backed up to ${path.relative(repoRoot, result.configBackupPath)})`,
-    );
+    line(`  (previous cortex.yaml backed up to ${result.configBackupPath})`);
   }
 
   // 5a. Source adapter selection + per-module wizards. Each enabled module
   //     writes to config/cortex.local.yaml (and .env + projects.local.yaml
   //     as needed) via the shared config-mutation service.
-  await stepAdapters(repoRoot);
+  await stepAdapters(writeRoot);
 
   // 6. Optional smoke test
   const shouldSmoke = await confirm({
@@ -108,14 +119,98 @@ export async function runInit(_: InitArgs): Promise<number> {
   }
 
   section("Next steps");
-  line("  - Edit config/projects.yaml and config/people.yaml");
+  line(`  - Populate projects: \`cortex add projects\``);
+  line(`  - Edit ${path.join(writeRoot, "config", "people.yaml")}`);
   line("  - Wire Cortex into Claude Code:");
   line(
     '      { "mcpServers": { "cortex": { "command": "cortex", "args": ["start"] } } }',
   );
   line("  - Run `cortex start` directly for debugging");
+  line("  - Launch the dashboard with `cortex dashboard` (needs api.enabled: true)");
   line("");
   return 0;
+}
+
+/**
+ * Pick (or create) the workspace that subsequent steps will write into.
+ *
+ * Returns the "root" path where config/ and .env live. For workspace
+ * users, that's `~/.cortex/workspaces/<slug>/`. For legacy setups
+ * (user declined to create a workspace), it falls back to the repo
+ * root so the old behavior still works.
+ */
+async function stepWorkspace(repoRoot: string): Promise<string> {
+  section("Workspace");
+
+  const active = await getActiveWorkspace();
+  if (active) {
+    ok(`using active workspace '${active.slug}'`);
+    line(`  ${active.path}`);
+    return active.path;
+  }
+
+  line(
+    "  A workspace is an isolated bundle of config + .env + memory state.\n" +
+      "  Create one per job, client, or personal context. Switch between\n" +
+      "  them any time with `cortex workspace switch <slug>`.",
+  );
+
+  const createOne = await confirm({
+    message: "Create a workspace now?",
+    default: true,
+  });
+  if (!createOne) {
+    warn(
+      "Skipping — init will write to the repo's ./config and .env instead. " +
+        "You can migrate later with `cortex workspace add <slug> --from .`.",
+    );
+    return repoRoot;
+  }
+
+  const slug = await input({
+    message: "Workspace slug (kebab-case — e.g. elevate, one-nomad, personal)",
+    validate: (v) => {
+      const trimmed = v.trim();
+      if (!trimmed) return "required";
+      const check = validateSlug(trimmed);
+      return check.ok ? true : check.reason;
+    },
+  });
+  const clean = slug.trim();
+
+  const existing = await findWorkspace(clean);
+  if (existing) {
+    const overwrite = await confirm({
+      message: `Workspace '${clean}' already exists at ${existing.path}. Use it?`,
+      default: true,
+    });
+    if (!overwrite) {
+      warn("Skipped — pick a different slug and re-run `cortex init`.");
+      return repoRoot;
+    }
+    await switchWorkspace(clean);
+    ok(`activated existing workspace '${clean}'`);
+    return existing.path;
+  }
+
+  // Offer to seed from the repo's current config so users migrating
+  // away from single-config setups keep their existing adapter + LLM
+  // choices.
+  const seedFromRepo =
+    repoRoot && (await confirm({
+      message: `Copy the current repo's config + .env into '${clean}'?`,
+      default: true,
+    }));
+
+  const ws = await createWorkspace({
+    slug: clean,
+    ...(seedFromRepo ? { fromPath: repoRoot } : {}),
+  });
+  await switchWorkspace(clean);
+  ok(`created workspace '${clean}' (active)`);
+  line(`  ${ws.path}`);
+  if (seedFromRepo) line(`  seeded from ${repoRoot}`);
+  return ws.path;
 }
 
 async function stepDependencies(): Promise<void> {
