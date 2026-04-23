@@ -16,25 +16,59 @@ and LLM provider is a standalone package — install only what you use.
 
 ## Status
 
-**Ten MCP tools** live: `list_projects`, `get_project_context`,
-`catch_me_up`, `catch_me_up_on_meeting`, `my_action_items`,
-`upcoming_briefs`, `research`, `approve_research` (draft / in_review /
-approved / revoked), `list_unclassified` (classifier review queue),
-and `todays_digest` (composite morning view). **Twelve source
-adapters** shipped — Confluence, Jira, Linear, Loom, Notion, Obsidian,
-Google Calendar, Google Drive, Gmail, Bitbucket, GitHub, Slack. **Five
-pipelines** shipped — doc, meeting (3-pass), code, conversation, and
-research (two-pass: extract → brief). **Pluggable memory backend** —
-Engram primary, `@cortex/memory-pgvector` as a native
-hybrid-search fallback (Postgres + pgvector + tsvector, fused via RRF).
+**Seventeen MCP tools** live:
+
+- *Knowledge:* `list_projects`, `get_project_context`, `catch_me_up`,
+  `catch_me_up_on_meeting`, `my_action_items`, `upcoming_briefs`,
+  `list_unclassified`, `todays_digest`
+- *Research:* `research`, `approve_research` (draft / in_review /
+  approved / revoked)
+- *Session bridge:* `leave_session_handoff`, `read_session_handoffs`,
+  `resolve_session_handoff` — hand a conversation off between Claude
+  Desktop, Claude Code, and Claude for Chrome via Cortex as the bus
+- *Workspaces:* `list_workspaces`, `current_workspace`,
+  `switch_workspace`, `add_workspace`
+
+**Workspaces.** One Cortex install serves multiple jobs or contexts
+(e.g. employer + personal) with fully isolated config + .env + memory
+state under `~/.cortex/workspaces/<slug>/`. Manage from the terminal
+(`cortex workspace *`), from Claude via MCP tools, or from the
+dashboard dropdown.
+
+**Local dashboard.** `@cortex/dashboard` (Next.js 15) ships eight
+widgets: priorities, today-meetings, upcoming-briefs, my-action-items,
+recent-decisions, recent-activity, code-activity, who-knows. Layout
+is YAML-driven with delivery/developer/custom role presets. Dashboard
+is optional — off by default (`api.enabled: false`).
+
+**Twelve source adapters** — Confluence, Jira, Linear, Loom, Notion,
+Obsidian, Google Calendar, Google Drive, Gmail, Bitbucket, GitHub,
+Slack. Atlassian + Google Calendar adapters implement
+`discoverProjects` so `cortex add bitbucket` (etc.) offers to
+auto-import discovered resources as projects without hand-typing
+slugs. Manual transcript import for sources without API access:
+`cortex import meeting <file>` runs .vtt / .srt / .md through the
+meeting pipeline.
+
+**Five pipelines** — doc, meeting (3-pass), code, conversation,
+research (two-pass: extract → brief).
+
+**Pluggable memory backend** — Engram primary, `@cortex/memory-pgvector`
+as a native hybrid-search fallback (Postgres + pgvector + tsvector,
+fused via RRF). `@cortex/memory-remote` skeleton ready for federated
+personal-local + shared-team Engram per ADR-016.
+
 **Cron-based scheduler** runs every enabled adapter on its schedule
 inside `cortex start`, reporting per-adapter run stats to a heartbeat
 file readable via `cortex status`. **Push-based ingestion** — adapters
-can implement `stream()` (Obsidian file-watcher today) or `webhook()`
-(GitHub push events today) for near-real-time updates alongside the
-cron path. **LLM classifier fallback** wired
-into every adapter. **Memory governance metadata** — `trust`,
-`sensitivity`, `status`, `trace_id` stamped on every ingest. 228 tests.
+can implement `stream()` (Obsidian file-watcher) or `webhook()`
+(GitHub push events) for near-real-time updates alongside the cron
+path. **LLM classifier fallback** wired into every adapter.
+
+**Pre-flight diagnostic.** `cortex doctor [--connect]` verifies
+config, secrets, tokens, and taxonomy before boot; `--connect` also
+live-probes Engram + Postgres. **Memory governance metadata** —
+`trust`, `sensitivity`, `status`, `trace_id` stamped on every ingest.
 
 ## Prerequisites
 
@@ -98,14 +132,36 @@ The wizard:
 ## Commands
 
 ```bash
-cortex init                 # interactive setup wizard
-cortex start                # boot the MCP server over stdio
-cortex status               # daemon heartbeat (uptime, per-adapter stats)
-cortex smoke                # live probe of every enabled LLM provider
-cortex sync <adapter>       # run one adapter's full ingestion cycle
-  --since=ISO                 only items updated after this date
-  --limit=N                   cap items processed
-  --dry-run                   don't write to memory
+cortex init                      # interactive setup wizard
+cortex start                     # boot the MCP server over stdio
+cortex status                    # daemon heartbeat (uptime, per-adapter stats)
+cortex doctor [--connect]        # pre-flight checks; --connect live-probes
+cortex smoke                     # live probe of every enabled LLM provider
+cortex dashboard [--port N]      # launch the Next.js web dashboard
+cortex sync <adapter>            # run one adapter's full ingestion cycle
+  --since=ISO                      only items updated after this date
+  --limit=N                        cap items processed
+  --dry-run                        don't write to memory
+cortex import meeting <file>     # run a transcript through pipeline-meeting
+  --project=<slug> --date=<ISO>
+  --attendees=<csv> --source-url=<url>
+  --dry-run
+
+cortex modules                   # list installable module wizards
+cortex add <module>              # enable an adapter/provider via wizard
+cortex add projects              # auto-discover + import projects
+cortex configure <module>        # re-run a wizard with current values
+cortex disable <module>          # turn off a configured module
+
+cortex workspace list            # every workspace, * marks active
+cortex workspace current         # print active slug
+cortex workspace add <slug>      # create a new workspace
+  [--from <path>]                  seed with an existing config dir
+cortex workspace switch <slug>
+cortex workspace remove <slug> --yes
+cortex workspace rename <old> <new>
+
+cortex google-login              # OAuth flow for gmail/calendar/drive
 cortex help
 ```
 
@@ -148,6 +204,100 @@ ATLASSIAN_API_TOKEN=...
 
 Then `cortex sync confluence --dry-run --limit=5` to preview, drop the
 flags to actually ingest.
+
+## Dashboard
+
+Local Next.js 15 app over an HTTP sidecar that `cortex start` boots
+when `api.enabled: true`. Per-user, localhost-only by default.
+Widgets are server-rendered React components that hit the sidecar's
+widget endpoints; layout is YAML-driven.
+
+```yaml
+# config/cortex.local.yaml (gitignored)
+api:
+  enabled: true
+  host: "127.0.0.1"
+  port: 4141
+```
+
+```yaml
+# config/dashboard.yaml — role preset + overrides
+role: delivery         # delivery | developer | custom
+widgets: []            # override or append preset entries
+```
+
+Run it:
+
+```bash
+cortex start           # terminal 1: MCP + sidecar
+cortex dashboard       # terminal 2: Next.js dev server on :3030
+```
+
+The header pill shows the active workspace and doubles as a switcher.
+Adding a widget is two files (server handler + React component) per
+ADR-015.
+
+## Workspaces
+
+One install, many contexts. Each workspace gets its own `cortex.yaml`,
+`projects.yaml`, `people.yaml`, `dashboard.yaml`, and `.env`, stored
+at `~/.cortex/workspaces/<slug>/`. Active workspace lives in
+`~/.cortex/state.json`; `resolveConfigPath` reads it before falling
+back to walk-up / home / cwd.
+
+```bash
+# Adopt the repo's current config as your first workspace
+cortex workspace add elevate --from .
+
+# Create a blank one for personal projects and switch
+cortex workspace add one-nomad
+cortex workspace switch one-nomad
+cortex init            # fresh LLM/adapter setup inside one-nomad
+
+# Later
+cortex workspace switch elevate
+```
+
+Manage from Claude instead of the terminal:
+
+```
+list_workspaces()
+current_workspace()
+switch_workspace({ slug: "one-nomad" })
+add_workspace({ slug: "personal", fromPath: "..." })
+```
+
+Or from the dashboard: click the blue workspace pill in the header.
+
+**Restart note.** Switching flips `state.json` immediately, but a
+running `cortex start` still holds the previous workspace's Engram
+subprocess + config in memory. Restart the daemon (and refresh the
+dashboard) to load the new workspace's data. MCP tool responses and
+the dashboard UI both surface this warning inline.
+
+Destructive ops (`remove`, `rename`) stay terminal-only to avoid
+accidental deletion via a chat tool.
+
+## Session handoffs
+
+Bridge conversations across Claude surfaces. At the end of a Claude
+Code session, leave a handoff. The next morning in Claude Desktop,
+read open handoffs to pick up where you left off.
+
+```
+leave_session_handoff({
+  summary: "Stuck debugging sync.ts race condition",
+  nextSteps: ["Add jitter to retry backoff"],
+  fileRefs: ["packages/server/src/sync.ts:142"],
+  platform: "claude-code"
+})
+
+read_session_handoffs()           # returns open handoffs newest-first
+resolve_session_handoff({ id, note: "Shipped in PR #42" })
+```
+
+Stored as regular Engram memories with `type: "session_handoff"` —
+searchable alongside everything else.
 
 ## LLM providers
 
@@ -276,11 +426,15 @@ or ngrok depending on deployment shape. See [ADR-013](docs/DECISIONS.md).
 ## Architecture
 
 ```
-AI Client (Claude Code / Claude.ai)
-       │ MCP
-       ▼
-Cortex MCP server
-       ├── MCP tools             list_projects, get_project_context, …
+AI Clients                         Browser
+  Claude Code / Desktop / Chrome   http://localhost:3030
+       │                                │
+       │ MCP (stdio or HTTP)            │ fetch /api/cortex/*
+       ▼                                ▼
+Cortex MCP server  ◄── HTTP sidecar ──► @cortex/dashboard
+       │                                (Next.js 15, widgets)
+       ├── MCP tools             17 shipped — knowledge, research,
+       │                         session bridge, workspace mgmt
        │
        ├── LLM provider layer    (pluggable, per-task routing)
        │     ├── @cortex/provider-ollama
@@ -308,9 +462,14 @@ Cortex MCP server
        │     ├── @cortex/pipeline-conversation  ✅  (chat threads → transcript + quotes)
        │     └── @cortex/pipeline-research      ✅  (topic → reference brief + findings)
        │
-       ├── Memory backend        (pluggable — engram or pgvector)
-       │     ├── @onenomad/engram-memory     (spawned as stdio subprocess — primary)
-       │     └── @cortex/memory-pgvector     (Postgres + pgvector — native fallback)
+       ├── Memory backend        (pluggable — engram, pgvector, or remote)
+       │     ├── @onenomad/engram-memory     (stdio subprocess — primary)
+       │     ├── @cortex/memory-pgvector     (Postgres + pgvector — native fallback)
+       │     └── @cortex/memory-remote       (HTTP MCP — federation, ADR-016)
+       │
+       ├── Workspace layer       (~/.cortex/workspaces/<slug>/)
+       │     Per-user config + .env + memory state bundles.
+       │     Switch via CLI, MCP, or dashboard.
        │
        └── Upstream MCP clients
              └── @onenomad/persona-mcp       (spawned as stdio subprocess)
@@ -334,7 +493,7 @@ Commands below run identically on Windows (PowerShell), macOS, and Linux:
 ```bash
 pnpm install              # install all workspace deps
 pnpm typecheck            # tsc --build across the monorepo
-pnpm test                 # unit tests (228 and counting)
+pnpm test                 # unit + integration tests across every package
 pnpm dev                  # run `cortex start` in watch mode
 pnpm smoke                # live provider smoke test
 ```
