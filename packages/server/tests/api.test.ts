@@ -195,6 +195,25 @@ describe("dashboard API", () => {
     expect(body.done![0]!.content).toContain("onboarding");
   });
 
+  it("serves /api/widgets/recent-activity grouped by project", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/widgets/recent-activity?days=7&limit=10`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      total: number;
+      projects: Array<{ project: string; count: number }>;
+    };
+    // Fixture has 3 action_items (alpha x2, beta x1) + 1 decision (alpha),
+    // so alpha should have 3 and beta should have 1. The decision doesn't
+    // bump the count for m3 since m3 is its own item.
+    const alpha = body.projects.find((p) => p.project === "alpha");
+    const beta = body.projects.find((p) => p.project === "beta");
+    expect(alpha?.count).toBe(3);
+    expect(beta?.count).toBe(1);
+    expect(body.total).toBe(4);
+  });
+
   it("serves /api/layout with the default delivery preset", async () => {
     const res = await fetch(`${baseUrl}/api/layout`);
     expect(res.status).toBe(200);
