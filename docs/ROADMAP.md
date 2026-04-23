@@ -4,33 +4,35 @@ Canonical build order and current state. Update after every meaningful session.
 
 ## Current Phase
 
-**Sprint B (module wizards) complete.** Every adapter, every LLM
-provider, the pgvector memory backend, and the webhooks receiver has a
-declarative `WizardModule` spec (ADR-014). The generic CLI runner walks
-any spec via @inquirer/prompts and the category-aware config-mutation
-service routes writes to the right YAML section. Google adapters share
-a single `cortex google-login` OAuth loopback; the three adapter wizards
-pre-flight the refresh token before running.
+**Sprint C (dashboard widgets) complete.** Local-per-user Next.js 15
+dashboard shipping eight widgets end-to-end: priorities, today-meetings
+(live Google Calendar), upcoming-briefs (wraps the MCP tool),
+my-action-items, recent-decisions, recent-activity, code-activity,
+who-knows. Layout is config-driven via `config/dashboard.yaml` with
+role presets (delivery, developer, custom) merged at request time so
+editing the YAML doesn't require a restart. Widget names unknown to
+the component registry render a placeholder so presets can reference
+future widgets without breaking the page. See ADR-015 for the
+local-per-user + HTTP-sidecar posture.
 
-**Surface area:** nine MCP tools live (`list_projects`,
-`get_project_context`, `catch_me_up`, `catch_me_up_on_meeting`,
-`my_action_items`, `upcoming_briefs`, `research`, `list_unclassified`,
-`todays_digest`). Twelve source adapters + five pipelines (doc,
-meeting, code, conversation, research). LLM classifier fallback on
-every adapter. Cron scheduler drives ingestion inside `cortex start`.
-Push-based ingestion via `stream()` (Obsidian chokidar) and
-`webhook()` (GitHub + Slack) per ADR-013. Native Postgres + pgvector
-fallback for Engram per ADR-012. Docker + HTTP MCP transport optional.
-~100 server tests, plus adapter/provider/pipeline tests across the
-workspace.
+**Surface area:** nine MCP tools + eight dashboard widgets live.
+Twelve source adapters + five pipelines (doc, meeting, code,
+conversation, research). LLM classifier fallback on every adapter.
+Cron scheduler drives ingestion inside `cortex start`. Push-based
+ingestion via `stream()` (Obsidian chokidar) and `webhook()` (GitHub
++ Slack) per ADR-013. Native Postgres + pgvector fallback for Engram
+per ADR-012. `cortex doctor --connect` live-probes Engram + Postgres.
+`cortex dashboard` spawns the Next.js dev server with CORTEX_API_URL
+derived from cortex.yaml. 138+ server tests, plus adapter/provider/
+pipeline tests across the workspace.
 
 Remaining work splits into:
-- **Sprint C (dashboard)** — Next.js 15 app consuming the same wizard
-  specs as web forms, plus a widget-based customizable dashboard
-  (priorities, meetings, action items, activity, decisions,
-  who-knows). Role presets for dev/manager/PM. Not started.
 - **Step 0b (federation)** — `@cortex/memory-remote` for hybrid
-  personal-local + shared-team Engram.
+  personal-local + shared-team Engram. Architectural ADR pending.
+- **Sprint C polish** — wizard-spec-driven admin forms (the "web
+  forms for every wizard module" goal from the original Sprint C
+  vision). The dashboard widget grid is done; the setup/configure
+  UI path is not.
 - **Upstream** — Engram `reference` cognitive layer (ADR-002), live
   Confluence smoke against real Atlassian, live Google OAuth smoke
   against a real consent screen.
@@ -163,25 +165,27 @@ indexed and searchable via Cortex tools with correct project tagging.
 
 ## Phase 6: Pre-Meeting Briefs
 
-- [ ] Google Calendar OAuth flow and token storage
-- [ ] Upcoming events poller
-- [ ] Brief generation pipeline: queries Engram for relevant project context,
-      past meetings in series, related Confluence docs, open action items
-- [ ] Delivery: markdown file to `<vault>/briefs/upcoming/` (will be useful
-      once Obsidian is set up)
-- [ ] MCP tool: `upcoming_briefs`
+- [x] Google Calendar OAuth flow and token storage (`@cortex/google-auth`
+      + `cortex google-login`)
+- [x] Upcoming events poller (`@cortex/adapter-google-calendar`)
+- [x] Brief generation pipeline: queries Engram for relevant project context,
+      past meetings in series, related docs, open action items
+- [x] MCP tool: `upcoming_briefs`
+- [x] Dashboard widget: `upcoming-briefs` (glanceable context, optional
+      LLM synthesis)
+- [ ] Delivery: markdown file to `<vault>/briefs/upcoming/` (deferred
+      until Obsidian vault is set up)
 
 Exit criteria: 30 minutes before a meeting, a brief is generated with
-attendees, prior decisions, open threads, suggested questions.
+attendees, prior decisions, open threads, suggested questions. Met via
+the MCP tool; dashboard surfaces a glanceable version.
 
 ## Phase 7: Daily Digest
 
-- [ ] End-of-day trigger
-- [ ] Queries Engram for today's meetings, important activity, action items
-- [ ] Prioritization logic: meetings where user was active, decisions vs
-      status, active-project filter
-- [ ] Delivery (email? Slack DM to self? file in vault?)
-- [ ] MCP tool: `todays_digest`
+- [x] MCP tool: `todays_digest` (queries Engram for today's meetings,
+      decisions, action items; skips status-only content)
+- [ ] End-of-day trigger / scheduled delivery
+- [ ] Delivery channel (email? Slack DM to self? file in vault?)
 - [ ] Weekly rollup variant
 
 ## Phase 8: Action Items
