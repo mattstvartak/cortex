@@ -2,6 +2,7 @@ import { runDashboard } from "./dashboard.js";
 import { autoLoadDotEnv } from "./dotenv.js";
 import { runDoctor } from "./doctor.js";
 import { runImportMeeting } from "./import-meeting.js";
+import { runGithubLogin } from "./github-login.js";
 import { runGoogleLogin } from "./google-login.js";
 import { runInit } from "./init.js";
 import {
@@ -47,6 +48,8 @@ Commands:
                                list, current, add, switch, remove, rename.
                                Each workspace has its own config/ and .env.
 
+  github-login [--scopes <csv>]
+                             Device-flow OAuth with GitHub. No PAT paste needed.
   google-login               Run the Google OAuth flow (for gmail/calendar/drive).
 
   help                       Show this message.
@@ -119,6 +122,9 @@ export async function runCli(argv: string[]): Promise<number> {
 
     case "google-login":
       return runGoogleLogin(rest);
+
+    case "github-login":
+      return runGithubLogin(rest);
 
     case "workspace":
       return runWorkspace(rest);

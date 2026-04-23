@@ -9,8 +9,25 @@ import type {
 import { LLMError } from "@cortex/llm-core";
 import { BaseLLMProvider, httpFetch } from "@cortex/llm-sdk";
 
+/**
+ * Accept Ollama's canonical bare `host:port` form (e.g. `0.0.0.0:11434`,
+ * which is what the daemon itself reads from OLLAMA_HOST) alongside
+ * full URLs. Prepend `http://` when the scheme is missing so both
+ * work — Cortex needs a fetch-ready URL but should not force users to
+ * re-specify the scheme just because we validate it.
+ */
+const ollamaHostSchema = z
+  .string()
+  .transform((v) => {
+    const trimmed = v.trim();
+    if (trimmed.length === 0) return trimmed;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `http://${trimmed}`;
+  })
+  .pipe(z.string().url());
+
 export const ollamaConfigSchema = z.object({
-  host: z.string().url().default("http://localhost:11434"),
+  host: ollamaHostSchema.default("http://localhost:11434"),
   defaultModel: z.string().default("qwen3:14b"),
   timeoutMs: z.number().int().positive().default(120_000),
   keepAlive: z.string().default("30m"),

@@ -34,7 +34,7 @@ export function loadDotEnv(p: string): void {
       const eq = line.indexOf("=");
       if (eq < 0) continue;
       const key = line.slice(0, eq).trim();
-      const value = line.slice(eq + 1).trim();
+      const value = unquote(line.slice(eq + 1).trim());
       if (key && !process.env[key]) {
         process.env[key] = value;
       }
@@ -42,6 +42,24 @@ export function loadDotEnv(p: string): void {
   } catch {
     // non-fatal
   }
+}
+
+/**
+ * Strip one layer of surrounding double or single quotes from a
+ * .env value. Matches what Docker Compose, python-dotenv, and
+ * node-dotenv all do — the unquoted form is the canonical value.
+ * Without this, `FOO="bar"` leaks into process.env as `"bar"` with
+ * literal quote chars, breaking any downstream URL/regex validator.
+ */
+function unquote(v: string): string {
+  if (v.length >= 2) {
+    const first = v[0];
+    const last = v[v.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return v.slice(1, -1);
+    }
+  }
+  return v;
 }
 
 /**

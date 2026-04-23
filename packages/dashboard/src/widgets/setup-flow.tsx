@@ -248,16 +248,23 @@ function DoneCard(): React.JSX.Element {
         Ready to go
       </h2>
       <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
-        Core config is in place. Head to the{" "}
-        <a href="/" className="font-medium underline">
-          dashboard
-        </a>{" "}
-        to see live widgets, or configure more adapters above.
+        Core config is in place. Configure more adapters above or finish
+        setup and open the dashboard.
       </p>
-      <p className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">
-        Note: If the daemon was already running, restart{" "}
-        <code className="font-mono">cortex start</code> so it loads the new
-        providers + adapters.
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <a
+          href="/"
+          className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+        >
+          Finish setup → go to dashboard
+        </a>
+        <span className="text-xs text-emerald-800 dark:text-emerald-300">
+          Keep this tab open and come back any time.
+        </span>
+      </div>
+      <p className="mt-3 text-xs text-emerald-800 dark:text-emerald-300">
+        Heads-up: if <code className="font-mono">cortex start</code> was
+        already running, restart it so the new providers + adapters load.
       </p>
     </section>
   );

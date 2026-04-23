@@ -10,8 +10,23 @@ import type {
   WebhookHandler,
 } from "@cortex/core";
 import { BaseAdapter, matchesGlobs } from "@cortex/adapter-sdk";
+import { tryReadGithubToken } from "@cortex/github-auth";
 import { GithubClient, type GithubTreeEntry } from "./client.js";
 import { createGithubWebhook } from "./webhook.js";
+
+/**
+ * Resolve a GitHub token from either the device-flow token file
+ * (`~/.cortex/github-token.json`, written by `cortex github-login`)
+ * or the GITHUB_TOKEN env var. File takes precedence so users who
+ * authorized via the modern flow don't also have to set an env var.
+ */
+async function resolveGithubToken(
+  envToken: string | undefined,
+): Promise<string | undefined> {
+  const fromFile = await tryReadGithubToken();
+  if (fromFile?.accessToken) return fromFile.accessToken;
+  return envToken && envToken.length > 0 ? envToken : undefined;
+}
 
 export const githubConfigSchema = z.object({
   /** `owner/repo` identifiers. */
@@ -85,7 +100,12 @@ export class GithubAdapter extends BaseAdapter {
   readonly name = "GitHub";
   readonly version = "0.1.0";
   readonly configSchema = githubConfigSchema;
-  readonly requiredSecrets = ["GITHUB_TOKEN"] as const;
+  // No required secrets — onInit resolves the token from the
+  // device-flow file (~/.cortex/github-token.json) first, then falls
+  // back to GITHUB_TOKEN env if it's set. Both paths work; neither
+  // is strictly required up front, so the registry shouldn't block
+  // init on env-var presence.
+  readonly requiredSecrets = [] as const;
   readonly capabilities = CAPABILITIES;
   readonly pipelines = ["@cortex/pipeline-code"] as const;
 
@@ -94,9 +114,11 @@ export class GithubAdapter extends BaseAdapter {
 
   protected override async onInit(): Promise<void> {
     this.cfg = this.configSchema.parse(this.ctx.config);
-    const token = this.ctx.secrets.GITHUB_TOKEN ?? "";
+    const token = await resolveGithubToken(this.ctx.secrets.GITHUB_TOKEN);
     if (!token) {
-      throw new Error("github adapter: GITHUB_TOKEN must be set");
+      throw new Error(
+        "github adapter: no token found. Run `cortex github-login` (device flow, recommended) or set GITHUB_TOKEN in .env.",
+      );
     }
     if (this.cfg.repos.length === 0) {
       throw new Error(

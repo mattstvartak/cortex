@@ -104,10 +104,24 @@ export function WizardForm({
     setSubmitting(true);
     setError(undefined);
     try {
+      // Split list-step strings into arrays at submit time — the inputs
+      // track raw strings during editing so the user can type commas
+      // without the controlled-input splitter eating them.
+      const payload: Record<string, unknown> = { ...values };
+      for (const step of spec.steps) {
+        if (step.type !== "list") continue;
+        const v = payload[step.key];
+        if (typeof v === "string") {
+          payload[step.key] = v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        }
+      }
       const res = await fetch(`/api/cortex/wizards/${spec.id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: values, secrets }),
+        body: JSON.stringify({ config: payload, secrets }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -292,27 +306,25 @@ function FieldForStep({
         </div>
       );
     case "list":
+      // Store the raw string during editing — don't split on each
+      // keystroke. Splitting + filtering empty segments during typing
+      // drops the user's trailing comma before it renders, which makes
+      // the comma key appear to do nothing. Submit-time transform
+      // converts the string into a string[] for the server.
       return (
         <div>
           {label}
           <input
             type="text"
             value={
-              Array.isArray(value)
-                ? (value as string[]).join(", ")
-                : typeof value === "string"
-                  ? value
+              typeof value === "string"
+                ? value
+                : Array.isArray(value)
+                  ? (value as string[]).join(", ")
                   : ""
             }
             placeholder={step.placeholder ?? "comma-separated"}
-            onChange={(e) =>
-              onChange(
-                e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter((s) => s.length > 0),
-              )
-            }
+            onChange={(e) => onChange(e.target.value)}
             className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
           />
           {hint}

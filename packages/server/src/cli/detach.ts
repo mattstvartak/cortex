@@ -1,5 +1,6 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, open } from "node:fs/promises";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { openSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -30,6 +31,15 @@ export interface DetachedOptions {
   sessionDir: string;
   /** Friendly name for log filenames — e.g. "sidecar", "dashboard". */
   label: string;
+  /**
+   * Force shell resolution. Needed when `command` is a .cmd/.bat shim
+   * on Windows (npm, pnpm, npx). For absolute paths like
+   * `process.execPath`, leave this false — Node on Windows with
+   * `shell:true` concatenates args without quoting, which corrupts
+   * any path containing a space (e.g. "Program Files").
+   * Default: false.
+   */
+  shell?: boolean;
 }
 
 /**
@@ -51,45 +61,118 @@ export async function spawnDetached(
   const stdoutLog = path.join(opts.sessionDir, `${opts.label}.stdout.log`);
   const stderrLog = path.join(opts.sessionDir, `${opts.label}.stderr.log`);
 
-  const outHandle = await open(stdoutLog, "a");
-  const errHandle = await open(stderrLog, "a");
+  if (process.platform === "win32") {
+    return spawnDetachedWindows({ ...opts, stdoutLog, stderrLog });
+  }
+  return spawnDetachedUnix({ ...opts, stdoutLog, stderrLog });
+}
 
-  // The stdio triplet is: [inherit stdin as /dev/null, pipe stdout to
-  // file, pipe stderr to file]. Using "ignore" for stdin matters on
-  // Windows — the child shouldn't inherit the parent's console handle
-  // because that's what keeps it alive when the parent closes.
+interface InternalOpts extends DetachedOptions {
+  stdoutLog: string;
+  stderrLog: string;
+}
+
+/**
+ * Unix path: `detached: true` + unref + raw fd stdio is the textbook
+ * pattern. Held-open fds work because fork() duplicates them into
+ * the child cleanly.
+ */
+function spawnDetachedUnix(opts: InternalOpts): DetachedSpawn {
+  const outFd = openSync(opts.stdoutLog, "a");
+  const errFd = openSync(opts.stderrLog, "a");
+
   const child: ChildProcess = spawn(opts.command, [...opts.args], {
     cwd: opts.cwd ?? process.cwd(),
     env: { ...process.env, ...(opts.env ?? {}) },
     detached: true,
-    stdio: ["ignore", outHandle.fd, errHandle.fd],
-    // On Windows, `shell: true` lets us resolve .cmd/.bat shims (npm,
-    // pnpm, etc.) without knowing the exact extension. Unix ignores it.
-    shell: process.platform === "win32",
-    windowsHide: true,
+    stdio: ["ignore", outFd, errFd],
+    shell: opts.shell ?? false,
   });
-
-  // Unref so the parent Node process exits even with the child still
-  // running. The child's own event loop keeps it alive.
   child.unref();
-
-  // Close our copy of the file handles — the child inherited its own
-  // via stdio. Not awaiting because the child has its own reference.
-  outHandle.close().catch(() => undefined);
-  errHandle.close().catch(() => undefined);
 
   if (!child.pid) {
     throw new Error(
-      `spawnDetached: ${opts.command} failed to start (no pid). ` +
-        `Check ${stderrLog} for details.`,
+      `spawnDetached: ${opts.command} failed to start (no pid).`,
     );
   }
+  return { pid: child.pid, stdoutLog: opts.stdoutLog, stderrLog: opts.stderrLog };
+}
 
+/**
+ * Windows path: use PowerShell's `Start-Process` with `-WindowStyle
+ * Hidden`. Node's own `detached: true` doesn't reliably break the
+ * parent-child relationship on Windows — the child gets dragged
+ * down by the console/job-object cascade when the parent exits.
+ * `Start-Process` is the OS-native detach primitive; the child
+ * genuinely stands on its own afterwards.
+ *
+ * Returns the child's pid via `-PassThru`. Output + errors go to
+ * the log files via `-RedirectStandardOutput` / `-RedirectStandardError`.
+ */
+function spawnDetachedWindows(opts: InternalOpts): DetachedSpawn {
+  const argList = opts.args
+    .map((a) => escapePowerShellSingleQuoted(a))
+    .map((a) => `'${a}'`)
+    .join(",");
+  const env = opts.env ?? {};
+  // Pre-set env vars in the PowerShell block so Start-Process sees them.
+  const envAssigns = Object.entries(env)
+    .map(
+      ([k, v]) =>
+        `$env:${k} = '${escapePowerShellSingleQuoted(v)}'`,
+    )
+    .join("; ");
+  const filePath = escapePowerShellSingleQuoted(opts.command);
+  const cwd = opts.cwd ?? process.cwd();
+  const cwdEsc = escapePowerShellSingleQuoted(cwd);
+  const stdoutEsc = escapePowerShellSingleQuoted(opts.stdoutLog);
+  const stderrEsc = escapePowerShellSingleQuoted(opts.stderrLog);
+  const argListPart = argList.length > 0 ? `-ArgumentList ${argList}` : "";
+
+  const psCommand =
+    (envAssigns ? `${envAssigns}; ` : "") +
+    `$p = Start-Process -FilePath '${filePath}' ${argListPart} ` +
+    `-WindowStyle Hidden -WorkingDirectory '${cwdEsc}' ` +
+    `-RedirectStandardOutput '${stdoutEsc}' -RedirectStandardError '${stderrEsc}' ` +
+    `-PassThru; $p.Id`;
+
+  const res = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", psCommand],
+    { encoding: "utf8" },
+  );
+  if (res.error) {
+    throw new Error(
+      `spawnDetached (Windows): ${res.error.message}. ` +
+        `Check ${opts.stderrLog} for details.`,
+    );
+  }
+  if (res.status !== 0) {
+    throw new Error(
+      `spawnDetached (Windows) PowerShell exit ${res.status}: ${res.stderr.trim() || "(no stderr)"}. ` +
+        `Check ${opts.stderrLog} for child process errors.`,
+    );
+  }
+  const pid = Number.parseInt(res.stdout.trim(), 10);
+  if (!pid || Number.isNaN(pid)) {
+    throw new Error(
+      `spawnDetached (Windows): Start-Process didn't return a pid. ` +
+        `stdout: ${res.stdout.slice(0, 200)}`,
+    );
+  }
   return {
-    pid: child.pid,
-    stdoutLog,
-    stderrLog,
+    pid,
+    stdoutLog: opts.stdoutLog,
+    stderrLog: opts.stderrLog,
   };
+}
+
+/**
+ * PowerShell single-quoted strings treat everything literally except
+ * the single-quote itself, which is escaped by doubling.
+ */
+function escapePowerShellSingleQuoted(v: string): string {
+  return v.replace(/'/g, "''");
 }
 
 /**

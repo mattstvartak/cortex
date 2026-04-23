@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   checkbox,
   confirm,
@@ -610,6 +611,10 @@ async function runWebSetup(repoRoot: string): Promise<number> {
     args: [bin, "start"],
     sessionDir,
     label: "sidecar",
+    // Force HTTP MCP transport so the server doesn't block on a
+    // closed stdin (the detached child's stdio[0] is /dev/null-
+    // equivalent; stdio MCP would wait for messages forever).
+    env: { CORTEX_MCP_TRANSPORT: "http" },
   });
   ok(`sidecar started (pid ${sidecar.pid})`);
 
@@ -672,34 +677,70 @@ async function runWebSetup(repoRoot: string): Promise<number> {
 }
 
 /**
- * Write a bare-minimum cortex.yaml so the sidecar can boot in setup
- * mode (api.enabled: true, no adapters, no providers). The web setup
- * page is responsible for filling in everything real; this just
- * gives the loader something valid to parse.
+ * Make sure the workspace's config is usable for a dashboard-driven
+ * setup — specifically, the HTTP sidecar must be enabled so the
+ * browser can reach /api/*. Two cases:
+ *
+ *   1. No cortex.yaml yet — write a minimum-viable bootstrap.
+ *   2. Seeded from a template with api.enabled: false — mutate the
+ *      yaml in place to flip the flag. Preserves all other keys.
+ *
+ * We don't use cortex.local.yaml here because it's a full replacement,
+ * not an overlay — an "api-only" local.yaml would hide llm/memory
+ * entirely and fail schema validation.
  */
 async function ensureBootstrapConfig(writeRoot: string): Promise<void> {
   const cfgPath = path.join(writeRoot, "config", "cortex.yaml");
-  if (existsSync(cfgPath)) return;
   const envPath = path.join(writeRoot, ".env");
-  const stub = [
-    "# Bootstrap config written by `cortex init --web`. The web",
-    "# setup page fills in providers, secrets, and adapters.",
-    "",
-    "llm:",
-    "  providers: {}",
-    "  tasks:",
-    "    default: { provider: ollama, model: qwen3:14b }",
-    "",
-    "api:",
-    "  enabled: true",
-    "  host: \"127.0.0.1\"",
-    "  port: 4141",
-    "",
-    "adapters: {}",
-    "",
-  ].join("\n");
-  await mkdir(path.dirname(cfgPath), { recursive: true });
-  await writeFile(cfgPath, stub, "utf8");
+
+  if (!existsSync(cfgPath)) {
+    const stub = [
+      "# Bootstrap config written by `cortex init --web`. The web",
+      "# setup page fills in providers, secrets, and adapters.",
+      "",
+      "llm:",
+      "  providers: {}",
+      "  tasks:",
+      "    default: { provider: ollama, model: qwen3:14b }",
+      "",
+      "api:",
+      "  enabled: true",
+      "  host: \"127.0.0.1\"",
+      "  port: 4141",
+      "",
+      "adapters: {}",
+      "",
+    ].join("\n");
+    await mkdir(path.dirname(cfgPath), { recursive: true });
+    await writeFile(cfgPath, stub, "utf8");
+  } else {
+    // Mutate the existing cortex.yaml to guarantee api.enabled: true.
+    // Parse → patch → restringify keeps the rest of the file intact.
+    const raw = await readFile(cfgPath, "utf8");
+    const parsed = (parseYaml(raw) ?? {}) as Record<string, unknown>;
+    const api =
+      (parsed.api && typeof parsed.api === "object"
+        ? (parsed.api as Record<string, unknown>)
+        : {}) as Record<string, unknown>;
+    let changed = false;
+    if (api.enabled !== true) {
+      api.enabled = true;
+      changed = true;
+    }
+    if (typeof api.host !== "string") {
+      api.host = "127.0.0.1";
+      changed = true;
+    }
+    if (typeof api.port !== "number") {
+      api.port = 4141;
+      changed = true;
+    }
+    if (changed) {
+      parsed.api = api;
+      await writeFile(cfgPath, stringifyYaml(parsed), "utf8");
+    }
+  }
+
   if (!existsSync(envPath)) {
     await writeFile(envPath, "# Secrets written by the setup wizard land here.\n", "utf8");
   }

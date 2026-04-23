@@ -309,10 +309,20 @@ export async function startServer(): Promise<void> {
     logger.info("shutdown.done");
   };
 
-  process.once("SIGINT", () => {
-    void shutdown().finally(() => process.exit(0));
-  });
-  process.once("SIGTERM", () => {
-    void shutdown().finally(() => process.exit(0));
+  // Block until a shutdown signal arrives. Without this gate the whole
+  // function returns right after setup, runCli resolves, and the
+  // entrypoint's `process.exit(code)` tears everything down — HTTP
+  // listeners included. That manifested as "sidecar dies a moment
+  // after api.listening" in the detached init flow.
+  await new Promise<void>((resolve) => {
+    const finish = (): void => {
+      void shutdown().finally(resolve);
+    };
+    process.once("SIGINT", finish);
+    process.once("SIGTERM", finish);
+    // Windows console close (Ctrl+Break, terminal close) delivers
+    // SIGBREAK, not SIGINT. Handle it the same way so detached
+    // processes don't get orphaned after a clean console close.
+    process.once("SIGBREAK", finish);
   });
 }
