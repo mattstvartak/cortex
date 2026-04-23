@@ -55,6 +55,7 @@ describe("dashboard API", () => {
   let baseUrl: string;
 
   beforeAll(async () => {
+    const now = new Date().toISOString();
     api = createDashboardApi({
       host: "127.0.0.1",
       port: 0,
@@ -69,8 +70,46 @@ describe("dashboard API", () => {
             project: "alpha",
             source: "meeting",
             source_url: "https://example.com/m1",
-            date: new Date().toISOString(),
+            date: now,
             tags: ["owner:matt", "due:2099-01-01", "status:open"],
+          },
+        },
+        {
+          id: "m2",
+          type: "action_item",
+          content: "Review PR for billing refactor",
+          metadata: {
+            source_id: "s2",
+            project: "beta",
+            source: "bitbucket",
+            date: now,
+            tags: ["owner:alex", "status:open"],
+          },
+        },
+        {
+          id: "m3",
+          type: "action_item",
+          content: "Archive old onboarding docs",
+          metadata: {
+            source_id: "s3",
+            project: "alpha",
+            source: "note",
+            date: now,
+            tags: ["owner:matt", "status:done"],
+          },
+        },
+        {
+          id: "d1",
+          type: "decision",
+          content: "We will ship the new pricing tiers on May 1",
+          metadata: {
+            source_id: "dec1",
+            project: "alpha",
+            source: "meeting",
+            source_url: "https://example.com/d1",
+            date: now,
+            people: ["matt", "alex"],
+            tags: ["type:decision"],
           },
         },
       ]),
@@ -104,7 +143,7 @@ describe("dashboard API", () => {
     expect(body.widgets.some((w) => w.name === "priorities")).toBe(true);
   });
 
-  it("serves /api/widgets/priorities with a row that bubbles up", async () => {
+  it("serves /api/widgets/priorities with rows that bubble up", async () => {
     const res = await fetch(
       `${baseUrl}/api/widgets/priorities?limit=5`,
     );
@@ -114,10 +153,61 @@ describe("dashboard API", () => {
       generatedAt: string;
     };
     expect(body.generatedAt).toBeTruthy();
-    // The fixture row has a 2099 due date but was just-nudged (date: now),
-    // so it surfaces as "just-nudged" rather than "overdue".
-    expect(body.rows.length).toBe(1);
+    // m1 + m2 as just-nudged action_items (m3 is done → skipped), d1 as
+    // fresh-decision. Sort order: just-nudged before fresh-decision, and
+    // within just-nudged the row with a due date wins the tiebreak.
+    expect(body.rows.length).toBe(3);
     expect(body.rows[0]!.reason).toBe("just-nudged");
+    expect(body.rows[0]!.content).toContain("slides");
+    expect(body.rows[2]!.reason).toBe("fresh-decision");
+  });
+
+  it("serves /api/widgets/my-action-items with only open items by default", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/widgets/my-action-items?owner=matt`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      owner?: string;
+      open: Array<{ status: string; content: string; owner?: string }>;
+      done?: Array<unknown>;
+    };
+    expect(body.owner).toBe("matt");
+    // Only m1 matches owner=matt and is open. m3 is matt but done.
+    expect(body.open.length).toBe(1);
+    expect(body.open[0]!.status).toBe("open");
+    expect(body.open[0]!.content).toContain("slides");
+    expect(body.done).toBeUndefined();
+  });
+
+  it("surfaces done items when my-action-items?includeDone=true", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/widgets/my-action-items?owner=matt&includeDone=true`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      open: Array<unknown>;
+      done?: Array<{ status: string; content: string }>;
+    };
+    expect(body.done).toBeDefined();
+    expect(body.done!.length).toBe(1);
+    expect(body.done![0]!.status).toBe("done");
+    expect(body.done![0]!.content).toContain("onboarding");
+  });
+
+  it("serves /api/widgets/recent-decisions newest-first", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/widgets/recent-decisions?days=30`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      since: string;
+      rows: Array<{ content: string; people?: string[] }>;
+    };
+    expect(body.since).toBeTruthy();
+    expect(body.rows.length).toBe(1);
+    expect(body.rows[0]!.content).toContain("pricing tiers");
+    expect(body.rows[0]!.people).toEqual(["matt", "alex"]);
   });
 
   it("404s on unknown widgets", async () => {

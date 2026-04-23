@@ -1,4 +1,6 @@
+import { MyActionItemsWidget } from "@/widgets/my-action-items";
 import { PrioritiesWidget } from "@/widgets/priorities";
+import { RecentDecisionsWidget } from "@/widgets/recent-decisions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,8 @@ export default function Home(): React.JSX.Element {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <PrioritiesWidget limit={20} />
+        <MyActionItemsWidget owner="matt" limit={25} />
+        <RecentDecisionsWidget days={7} limit={15} />
         {/* Additional widgets land here as they ship. See ADR-015. */}
       </div>
     </main>
