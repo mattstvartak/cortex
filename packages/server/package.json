@@ -60,6 +60,8 @@
     "@cortex/adapter-notion": "workspace:*",
     "@cortex/adapter-obsidian": "workspace:*",
     "@cortex/adapter-slack": "workspace:*",
+    "@onenomad/engram-memory": "^1.0.0-beta.8",
+    "@onenomad/persona-mcp": "^1.0.0-beta.6",
     "@inquirer/prompts": "^7.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "yaml": "^2.6.0",

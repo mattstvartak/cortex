@@ -4,6 +4,7 @@ import {
   connectMcpSubprocess,
   type McpSubprocess,
 } from "./mcp-subprocess.js";
+import { resolvePackageBin } from "./resolve-bin.js";
 
 export interface PersonaClientOptions {
   /** Bin name for the Persona MCP server. Default: "persona-mcp". */
@@ -37,10 +38,21 @@ export interface PersonaClient {
 export async function createPersonaClient(
   opts: PersonaClientOptions,
 ): Promise<PersonaClient> {
+  const resolved = opts.command
+    ? undefined
+    : resolvePackageBin("@onenomad/persona-mcp");
+  const spawnOpts = resolved
+    ? {
+        command: resolved.node,
+        args: [resolved.script, ...(opts.args ?? [])],
+      }
+    : {
+        command: opts.command ?? "persona-mcp",
+        args: opts.args ?? [],
+      };
   const sub = await connectMcpSubprocess({
     id: "persona",
-    command: opts.command ?? "persona-mcp",
-    args: opts.args ?? [],
+    ...spawnOpts,
     ...(opts.env ? { env: opts.env } : {}),
     logger: opts.logger,
   });

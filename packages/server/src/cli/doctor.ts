@@ -398,7 +398,7 @@ async function probeEngram(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const hint = /ENOENT|not found|spawn/i.test(msg)
-      ? " — is @onenomad/engram-memory installed globally?"
+      ? " — @onenomad/engram-memory should ship as a cortex dependency; try `npm install` or `pnpm install`"
       : "";
     return { name, verdict: "fail", detail: `${msg}${hint}` };
   }

@@ -4,6 +4,7 @@ import {
   connectMcpSubprocess,
   type McpSubprocess,
 } from "./mcp-subprocess.js";
+import { resolvePackageBin } from "./resolve-bin.js";
 
 export interface EngramClientOptions {
   /** Bin name for the Engram MCP server. Default: "engram-memory". */
@@ -54,10 +55,21 @@ export interface EngramClient extends EngramAccess {
 export async function createEngramClient(
   opts: EngramClientOptions,
 ): Promise<EngramClient> {
+  const resolved = opts.command
+    ? undefined
+    : resolvePackageBin("@onenomad/engram-memory");
+  const spawnOpts = resolved
+    ? {
+        command: resolved.node,
+        args: [resolved.script, ...(opts.args ?? [])],
+      }
+    : {
+        command: opts.command ?? "engram-memory",
+        args: opts.args ?? [],
+      };
   const sub = await connectMcpSubprocess({
     id: "engram",
-    command: opts.command ?? "engram-memory",
-    args: opts.args ?? [],
+    ...spawnOpts,
     ...(opts.env ? { env: opts.env } : {}),
     logger: opts.logger,
   });
