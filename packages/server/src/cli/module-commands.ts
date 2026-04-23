@@ -1,13 +1,27 @@
+import path from "node:path";
+import { confirm, select } from "@inquirer/prompts";
 import { defaultTokenPath, readGoogleToken } from "@cortex/google-auth";
+import {
+  discoverProjectCandidates,
+  loadCurrentConfig,
+  type DiscoveredCandidate,
+} from "./discovery.js";
 import { findRepoRoot, loadDotEnv } from "./dotenv.js";
-import { runProjectsWizard } from "./projects-wizard.js";
+import {
+  pickAndRefineCandidates,
+  runProjectsWizard,
+} from "./projects-wizard.js";
+import { resolveConfigPath } from "./config-path.js";
 import { runWizard } from "./wizard-runner.js";
 import { findWizard, listWizards, wizardsByCategory } from "./wizard-registry.js";
 import {
   applyWizardResult,
   disableModule,
+  ensureLocalCopy,
+  mergeProjects,
   readModuleConfig,
 } from "./config-mutation.js";
+import { createLogger } from "../logger.js";
 
 const GOOGLE_MODULES = new Set(["gmail", "google-calendar", "google-drive"]);
 
@@ -48,8 +62,112 @@ export async function runAdd(args: readonly string[]): Promise<number> {
   process.stdout.write(
     `\nSaved:\n${filesWritten.map((f) => `  ${f}`).join("\n")}\n`,
   );
-  process.stdout.write(`\nEnabled "${moduleId}". Run \`cortex sync ${moduleId} --dry-run --limit=5\` to smoke-test.\n`);
+  process.stdout.write(`\nEnabled "${moduleId}".`);
+
+  // Post-install project import — only if the adapter has a discovery
+  // hook. Silently skips for everything else.
+  await offerProjectImport({ moduleId, repoRoot });
+
+  process.stdout.write(
+    `\nRun \`cortex sync ${moduleId} --dry-run --limit=5\` to smoke-test.\n`,
+  );
   return 0;
+}
+
+/**
+ * After an adapter wizard finishes, if the adapter implements
+ * `discoverProjects`, offer to import what it found into
+ * `projects.local.yaml`. Three-way choice: Add all, Pick some, Skip.
+ *
+ * Runs live — instantiates the adapter with the just-written config
+ * and calls `discoverProjects`. Failures are logged, not fatal; the
+ * user can always re-run `cortex add projects` later.
+ */
+async function offerProjectImport(args: {
+  moduleId: string;
+  repoRoot: string;
+}): Promise<void> {
+  const { moduleId, repoRoot } = args;
+  const configPath = resolveConfigPath();
+  const cfg = await loadCurrentConfig(configPath);
+  if (!cfg) return;
+  const entry = cfg.adapters[moduleId];
+  if (!entry?.enabled) return;
+
+  const logger = createLogger({ component: "post-install-discovery" });
+  process.stdout.write("\nScanning for project candidates...\n");
+  const result = await discoverProjectCandidates({
+    cfg,
+    repoRoot,
+    logger,
+    adapterIds: [moduleId],
+  });
+  const adapterRow = result.perAdapter.find((r) => r.adapterId === moduleId);
+  if (!adapterRow) return;
+  if (adapterRow.status === "no-discovery") {
+    // Adapter doesn't support discovery — nothing to offer.
+    return;
+  }
+  if (adapterRow.status === "failed") {
+    process.stdout.write(
+      `  Couldn't auto-discover from ${moduleId}: ${adapterRow.error ?? "unknown"}\n` +
+        `  You can still run \`cortex add projects\` to add them manually.\n`,
+    );
+    return;
+  }
+  const candidates = result.candidates;
+  if (candidates.length === 0) {
+    process.stdout.write(`  No projects found in ${moduleId}.\n`);
+    return;
+  }
+
+  process.stdout.write(
+    `\nFound ${candidates.length} project candidate${candidates.length === 1 ? "" : "s"} in ${moduleId}.\n`,
+  );
+  const choice = await select<"all" | "pick" | "skip">({
+    message: "Import them?",
+    choices: [
+      { value: "all", name: `Add all ${candidates.length}` },
+      { value: "pick", name: "Let me pick some" },
+      { value: "skip", name: "Skip — I'll run `cortex add projects` later" },
+    ],
+    default: "all",
+  });
+
+  let picked: DiscoveredCandidate[];
+  if (choice === "skip") return;
+  if (choice === "all") {
+    picked = candidates;
+  } else {
+    picked = await pickAndRefineCandidates(candidates);
+  }
+  if (picked.length === 0) return;
+
+  const projectsPath = await ensureLocalCopy(
+    path.join(repoRoot, "config", "projects.yaml"),
+  );
+  await mergeProjects(
+    projectsPath,
+    picked.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      ...(c.description ? { description: c.description } : {}),
+      ...(c.sources && Object.keys(c.sources).length > 0
+        ? { sources: c.sources }
+        : {}),
+    })),
+  );
+  process.stdout.write(
+    `\nAdded ${picked.length} project${picked.length === 1 ? "" : "s"} to ${projectsPath}:\n` +
+      `  ${picked.map((c) => c.slug).join("\n  ")}\n`,
+  );
+  // Confirm to keep going — useful if the user wants to review the
+  // YAML before moving on. Declining doesn't undo the write; it just
+  // pauses so the message is readable.
+  await confirm({
+    message: "Continue?",
+    default: true,
+  }).catch(() => undefined);
 }
 
 /**

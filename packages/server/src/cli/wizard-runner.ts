@@ -39,6 +39,16 @@ export async function runWizard<TConfig>(
 
   const state: Record<string, unknown> = { ...(opts.currentValues ?? {}) };
   for (const step of module.steps) {
+    // Steps with an empty prompt are schema-placeholder shims (e.g.
+    // Confluence's spaceToProject, which exists only to satisfy the
+    // Zod schema while the real mapping lives in a richer step).
+    // Skip the prompt but still seed the default so the config parses.
+    if (step.prompt.trim().length === 0) {
+      if (state[step.key] === undefined && step.defaultValue !== undefined) {
+        state[step.key] = step.defaultValue;
+      }
+      continue;
+    }
     state[step.key] = await askStep(step, state);
   }
 

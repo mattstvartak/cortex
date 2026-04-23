@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   dedupeBySlug,
   type DiscoveredCandidate,
-} from "../src/cli/projects-wizard.js";
+} from "../src/cli/discovery.js";
 
 describe("dedupeBySlug", () => {
   it("merges source hints when the same slug comes from two adapters", () => {
