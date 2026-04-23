@@ -156,6 +156,47 @@ export interface SourceAdapter {
    * "pull_request" for GitHub at different paths).
    */
   webhook?(ctx: WebhookContext): WebhookHandler | WebhookHandler[];
+
+  /**
+   * Optional project discovery. Adapters that know about user-owned
+   * "project-shaped" resources (Confluence spaces, Bitbucket repos,
+   * Google calendars, Obsidian top-level folders, etc.) implement this
+   * so the `cortex add projects` wizard can offer auto-discovered
+   * candidates rather than making the user hand-type slugs.
+   *
+   * Called by the wizard layer, not the scheduler. Safe to hit external
+   * APIs here — the wizard is interactive and the user initiated it.
+   * Implementations should cap results to something reasonable (50-ish)
+   * and surface only resources the authenticated user can actually read.
+   */
+  discoverProjects?(): Promise<ProjectCandidate[]>;
+}
+
+/**
+ * One candidate project surfaced by an adapter's `discoverProjects`.
+ * The wizard shows these as a multi-select checklist and writes the
+ * chosen entries into `config/projects.yaml`.
+ */
+export interface ProjectCandidate {
+  /** Suggested kebab-case slug. Wizard may prompt to edit before save. */
+  slug: string;
+  /** Human-readable name. Typically the source resource's display name. */
+  name: string;
+  /** One-sentence hint shown under the name in the picker. */
+  description?: string;
+  /**
+   * Source identifier the wizard writes into `projects.yaml.sources`,
+   * e.g. `{ confluence_space: "ALPHA" }` or `{ bitbucket_repos:
+   * ["alpha-api", "alpha-web"] }`. Keys match the schema in
+   * `@cortex/core/src/project.ts`.
+   */
+  sourceHints?: Record<string, unknown>;
+  /**
+   * Adapter id (e.g. "confluence", "bitbucket"). Populated by the wizard
+   * layer from the adapter, not the adapter itself — saves every
+   * implementation from duplicating `sourceAdapter: "confluence"`.
+   */
+  sourceAdapter?: string;
 }
 
 /**

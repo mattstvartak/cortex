@@ -5,6 +5,7 @@ import type {
   ClassificationContext,
   ClassifiedItem,
   NormalizedItem,
+  ProjectCandidate,
   RawSourceItem,
 } from "@cortex/core";
 import { BaseAdapter } from "@cortex/adapter-sdk";
@@ -222,6 +223,70 @@ export class GoogleCalendarAdapter extends BaseAdapter {
     }
     return { ...item, ...(await this.fallbackClassify(item, cctx, this.cfg.defaultProject)) };
   }
+
+  /**
+   * Surface every calendar the authed user can read as a project
+   * candidate. The wizard layer decides which to keep and writes
+   * `google_calendar_id` into the resulting projects.yaml entry.
+   *
+   * Skips calendars with `hidden` or `deleted` set, and system calendars
+   * Google provides (birthdays, holidays, etc.) — those aren't projects.
+   */
+  async discoverProjects(): Promise<ProjectCandidate[]> {
+    interface CalendarListEntry {
+      id: string;
+      summary?: string;
+      summaryOverride?: string;
+      description?: string;
+      accessRole?: string;
+      primary?: boolean;
+      hidden?: boolean;
+      deleted?: boolean;
+    }
+    interface CalendarListResponse {
+      items?: CalendarListEntry[];
+      nextPageToken?: string;
+    }
+
+    const candidates: ProjectCandidate[] = [];
+    let pageToken: string | undefined;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const params = new URLSearchParams({ maxResults: "100" });
+      if (pageToken) params.set("pageToken", pageToken);
+      const data = await this.auth.authorizedFetch<CalendarListResponse>(
+        `https://www.googleapis.com/calendar/v3/users/me/calendarList?${params.toString()}`,
+      );
+      for (const entry of data.items ?? []) {
+        if (entry.hidden || entry.deleted) continue;
+        // Skip system-provided read-only calendars (holidays, birthdays,
+        // US Holidays, etc.). They surface as accessRole "reader" with an
+        // `@group.v.calendar.google.com` id suffix.
+        if (entry.id.endsWith("@group.v.calendar.google.com")) continue;
+        const name = (entry.summaryOverride ?? entry.summary ?? "").trim();
+        if (!name) continue;
+        candidates.push({
+          slug: slugify(name),
+          name,
+          ...(entry.description ? { description: entry.description } : {}),
+          sourceHints: { google_calendar_id: entry.id },
+        });
+      }
+      if (!data.nextPageToken) break;
+      pageToken = data.nextPageToken;
+    }
+    return candidates;
+  }
+}
+
+function slugify(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "calendar";
 }
 
 function stripHtml(s: string): string {

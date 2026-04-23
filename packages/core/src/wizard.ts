@@ -126,7 +126,18 @@ export interface WizardSecret {
 }
 
 export interface DerivedTaxonomy {
-  projects?: readonly { slug: string; name?: string; description?: string }[];
+  projects?: readonly {
+    slug: string;
+    name?: string;
+    description?: string;
+    /**
+     * Source hints to persist under `projects.yaml.sources`. Emitted by
+     * the projects wizard when a project was discovered through an
+     * adapter (e.g. `{ google_calendar_id: "..." }`). Merged into any
+     * existing `sources` block; user-curated fields are never overwritten.
+     */
+    sources?: Record<string, unknown>;
+  }[];
   people?: readonly { slug: string; name?: string; email?: string }[];
   engagements?: readonly { slug: string; name?: string }[];
 }

@@ -1,5 +1,6 @@
 import { defaultTokenPath, readGoogleToken } from "@cortex/google-auth";
 import { findRepoRoot, loadDotEnv } from "./dotenv.js";
+import { runProjectsWizard } from "./projects-wizard.js";
 import { runWizard } from "./wizard-runner.js";
 import { findWizard, listWizards, wizardsByCategory } from "./wizard-registry.js";
 import {
@@ -20,6 +21,9 @@ export async function runAdd(args: readonly string[]): Promise<number> {
     printUsage();
     return 2;
   }
+  // Special-case taxonomy wizards — they don't configure a module, they
+  // populate projects.yaml / people.yaml via runtime discovery.
+  if (moduleId === "projects") return runProjectsWizard(args.slice(1));
   const wizard = findWizard(moduleId);
   if (!wizard) {
     process.stderr.write(
@@ -127,7 +131,12 @@ export async function runList(): Promise<number> {
 
 function printUsage(): void {
   process.stderr.write(
-    `Usage:\n  cortex add <module>\n  cortex configure <module>\n  cortex disable <module>\n  cortex modules\n\n${formatWizardList()}\n`,
+    `Usage:\n` +
+      `  cortex add projects      # auto-discover + add projects\n` +
+      `  cortex add <module>      # enable an adapter/provider via wizard\n` +
+      `  cortex configure <module>\n` +
+      `  cortex disable <module>\n` +
+      `  cortex modules\n\n${formatWizardList()}\n`,
   );
 }
 

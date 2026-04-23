@@ -15,6 +15,10 @@ export const projectSourcesSchema = z
     confluence_space: z.string().optional(),
     /** Bitbucket repo slugs that belong to this project. */
     bitbucket_repos: z.array(z.string()).optional(),
+    /** GitHub repo slugs ("owner/repo") that belong to this project. */
+    github_repos: z.array(z.string()).optional(),
+    /** Google Calendar id that covers this project's meetings. */
+    google_calendar_id: z.string().optional(),
     /** Loom folder/workspace id, if content is scoped per-project. */
     loom_folder: z.string().optional(),
     /** Obsidian path prefix that maps to this project. */

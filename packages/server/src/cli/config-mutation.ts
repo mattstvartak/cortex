@@ -257,7 +257,7 @@ function applyByCategory(
  * `<dir>/<name>.yaml` template to it so the first write has somewhere
  * to land. Returns the local path either way.
  */
-async function ensureLocalCopy(templatePath: string): Promise<string> {
+export async function ensureLocalCopy(templatePath: string): Promise<string> {
   const ext = path.extname(templatePath);
   const base = templatePath.slice(0, -ext.length);
   const localPath = `${base}.local${ext}`;
@@ -364,7 +364,7 @@ function quoteIfNeeded(value: string): string {
  * Add missing project slugs to projects.local.yaml. Existing slugs are
  * left alone — the wizard doesn't overwrite user-curated entries.
  */
-async function mergeProjects(
+export async function mergeProjects(
   filePath: string,
   projects: DerivedTaxonomy["projects"] & {},
 ): Promise<void> {
@@ -378,12 +378,28 @@ async function mergeProjects(
       }
     }
     for (const proj of projects) {
-      if (bySlug.has(proj.slug)) continue;
+      const current = bySlug.get(proj.slug);
+      if (current) {
+        // Merge source hints into an existing entry — never overwrite
+        // user-curated fields. Lets discovery re-runs enrich a project
+        // that was partially set up by hand.
+        if (proj.sources && Object.keys(proj.sources).length > 0) {
+          const existingSources =
+            current.sources && typeof current.sources === "object"
+              ? (current.sources as Record<string, unknown>)
+              : {};
+          current.sources = { ...proj.sources, ...existingSources };
+        }
+        continue;
+      }
       bySlug.set(proj.slug, {
         slug: proj.slug,
         name: proj.name ?? proj.slug,
         ...(proj.description ? { description: proj.description } : {}),
         active: true,
+        ...(proj.sources && Object.keys(proj.sources).length > 0
+          ? { sources: proj.sources }
+          : {}),
       });
     }
     return { ...cfg, projects: [...bySlug.values()] };

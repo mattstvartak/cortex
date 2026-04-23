@@ -253,7 +253,7 @@ export async function runDoctor(args: readonly string[]): Promise<number> {
     results.push({
       name: "projects taxonomy",
       verdict: "warn",
-      detail: "no projects.yaml — ingested items won't have project tags",
+      detail: "no projects.yaml — run `cortex add projects`",
     });
   } else {
     try {
@@ -262,7 +262,10 @@ export async function runDoctor(args: readonly string[]): Promise<number> {
       results.push({
         name: "projects taxonomy",
         verdict: count > 0 ? "ok" : "warn",
-        detail: `${count} project${count === 1 ? "" : "s"} defined`,
+        detail:
+          count === 0
+            ? "0 projects — run `cortex add projects`"
+            : `${count} project${count === 1 ? "" : "s"} defined`,
       });
     } catch (err) {
       results.push({
