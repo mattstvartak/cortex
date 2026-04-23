@@ -7,6 +7,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { connectConfiguredTransport } from "./transport.js";
 import { resolveConfigPath } from "../cli/config-path.js";
+import { removePidFile, writePidFile } from "../cli/pid-file.js";
+import { getActiveWorkspace } from "../cli/workspace/manager.js";
 import { loadCortexConfig } from "../config.js";
 import { createLogger } from "../logger.js";
 import { buildLLMRouter } from "../registry/providers.js";
@@ -34,6 +36,16 @@ export async function startServer(): Promise<void> {
 
   logger.info("startup.begin", { configPath });
   const cfg = await loadCortexConfig(configPath);
+
+  // Track the running daemon's PID so `cortex restart` / `cortex stop`
+  // can find it. Per-workspace so different contexts don't stomp on
+  // each other's files.
+  const activeWorkspace = await getActiveWorkspace().catch(() => undefined);
+  const pidPath = await writePidFile(
+    process.pid,
+    activeWorkspace?.slug,
+  ).catch(() => undefined);
+  if (pidPath) logger.info("pid_file.written", { path: pidPath, pid: process.pid });
 
   const repoRoot = path.resolve(path.dirname(configPath), "..");
   const taxonomy = await loadTaxonomy({
@@ -306,6 +318,7 @@ export async function startServer(): Promise<void> {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+    await removePidFile(activeWorkspace?.slug).catch(() => undefined);
     logger.info("shutdown.done");
   };
 

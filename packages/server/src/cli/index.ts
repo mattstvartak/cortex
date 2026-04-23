@@ -11,6 +11,7 @@ import {
   runDisable,
   runList,
 } from "./module-commands.js";
+import { runRestart, runStop } from "./restart.js";
 import { runSmoke } from "./smoke.js";
 import { runStatus } from "./status.js";
 import { runSyncCli } from "./sync.js";
@@ -25,6 +26,10 @@ Usage:
 Commands:
   init                       Interactive setup wizard (first run).
   start                      Boot the Cortex MCP server over stdio.
+  stop                       Gracefully stop the running daemon.
+  restart [--foreground]     Stop the running daemon + spawn a fresh
+                               one detached. --foreground keeps it in
+                               this terminal.
   status                     Show daemon heartbeat (uptime, adapter stats).
   doctor [--connect]         Pre-flight checks: config, secrets, tokens, taxonomy.
                                --connect also probes Engram + Postgres live.
@@ -132,6 +137,12 @@ export async function runCli(argv: string[]): Promise<number> {
     case "start":
       await startServer();
       return 0;
+
+    case "stop":
+      return runStop(rest);
+
+    case "restart":
+      return runRestart(rest);
 
     default:
       process.stderr.write(`cortex: unknown command '${command}'\n\n`);
