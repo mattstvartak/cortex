@@ -1,22 +1,28 @@
-# Docker Compose recipe for running Cortex in server-mode.
+# docker compose recipe for Cortex.
 #
-# Local developers usually don't need this — `pnpm dev` + stdio MCP in
-# Claude Code is simpler. Compose is the production path: a Hetzner box
-# (ADR-005) serving HTTP MCP over Tailscale, with optional Postgres for
-# the pgvector memory fallback and optional Ollama for local LLM.
+# Two services:
+#   cortex    - MCP + API server (engram/persona run as stdio children inside)
+#   dashboard - Next.js UI that proxies /api/cortex/* to the cortex API
 #
 # Quick start:
-#   cp .env.example .env         # fill in secrets
+#   cp .env.example .env   # fill in at least one LLM key (OpenRouter is easiest)
 #   docker compose up -d
 #
-# Profiles let you opt into supplementary services:
+# Remote VPS: put this behind Tailscale (dashboard + MCP stay on the tailnet,
+# no public auth needed) or a reverse proxy with TLS + bearer auth. The
+# exposed ports below are published to 127.0.0.1 by default so nothing
+# leaks to the open internet unless you explicitly change the bind.
+#
+# Workspaces + OAuth tokens + engram/persona data all live under the
+# CORTEX_HOME_HOST directory you bind-mount below. Default is
+# ./.cortex-data in the repo; set it to your real ~/.cortex to reuse an
+# existing workspace (e.g. CORTEX_HOME_HOST=/home/matt/.cortex).
+#
+# Optional profiles:
 #   docker compose --profile pgvector up     # adds Postgres + pgvector
 #   docker compose --profile ollama up       # adds a local Ollama daemon
-#   docker compose --profile all up          # everything
-#
-# To point Claude Code at a running container over Tailscale, set
-# CORTEX_MCP_TRANSPORT=http and configure the HTTP endpoint in your
-# Claude Code mcpServers config.
+#                                              (only useful if the host has a GPU
+#                                               — on a VPS, use OpenRouter)
 
 services:
   cortex:
@@ -26,23 +32,65 @@ services:
       dockerfile: packages/server/Dockerfile
     environment:
       - NODE_ENV=production
-      # stdio by default for interactive use; override to "http" for
-      # containerized deployments that serve Claude Code over the network.
-      - CORTEX_MCP_TRANSPORT=${CORTEX_MCP_TRANSPORT:-http}
+      - CORTEX_MCP_TRANSPORT=http
+      - CORTEX_MCP_HOST=0.0.0.0
       - CORTEX_MCP_PORT=${CORTEX_MCP_PORT:-3100}
-      - CORTEX_CONFIG_PATH=/config/cortex.yaml
-      # Default to the compose-internal Postgres when pgvector profile is
-      # active; overridden by .env when the user points at their own DB.
-      - POSTGRES_URL=${POSTGRES_URL:-postgres://cortex:cortex@pgvector:5432/cortex}
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - CORTEX_API_HOST=0.0.0.0
+      - CORTEX_API_PORT=${CORTEX_API_PORT:-4141}
+      # Dashboard runs as its own service, not a child of cortex.
+      - CORTEX_DASHBOARD_AUTOSTART=false
+      - CORTEX_WORKSPACE=${CORTEX_WORKSPACE:-}
+      # Redirect engram + persona data dirs under the bind-mounted
+      # /root/.cortex so their LanceDB + soul files survive restarts.
+      # (Default for both is ~/.claude/<name>, which isn't mounted.)
+      - ENGRAM_DATA_DIR=/root/.cortex/engram-data
+      - PERSONA_DATA_DIR=/root/.cortex/persona-data
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # LLM provider hosts. host.docker.internal works on Docker Desktop
+      # (Mac/Windows); on Linux it requires extra_hosts (see below).
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - POSTGRES_URL=${POSTGRES_URL:-}
     env_file:
       - .env
-    ports:
-      - "${CORTEX_MCP_PORT:-3100}:3100"
-      - "${CORTEX_WEBHOOK_PORT:-4040}:4040"
+    extra_hosts:
+      # Lets Linux hosts reach the host gateway the same way
+      # Docker Desktop does on Mac/Windows. Harmless elsewhere.
+      - "host.docker.internal:host-gateway"
     volumes:
-      - ./config:/config:ro
-      - cortex-state:/root/.cortex
+      - ${CORTEX_HOME_HOST:-./.cortex-data}:/root/.cortex
+      # Private modules — each is its own sibling repo, mounted
+      # read-only so the running server can import compiled dist/
+      # files. Add a line per module; point cortex.yaml's
+      # `privateModules` list at the mounted paths.
+      - ../cortex-career-automation:/root/cortex-career-automation:ro
+    ports:
+      # Publish on all interfaces so both IPv4 and IPv6 localhost work
+      # (Docker Desktop on Windows forwards 127.0.0.1-only binds to IPv4
+      # only, which breaks browsers that resolve `localhost` to ::1).
+      # For VPS deployments put Tailscale or a reverse proxy in front —
+      # these ports should NOT be publicly reachable without auth.
+      - "${CORTEX_MCP_PORT:-3100}:3100"
+      - "${CORTEX_API_PORT:-4141}:4141"
+    restart: unless-stopped
+
+  dashboard:
+    image: cortex-dashboard:local
+    build:
+      context: .
+      dockerfile: packages/dashboard/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3030
+      - HOSTNAME=0.0.0.0
+      # Next.js runs rewrites on the server, so this hits cortex via
+      # the compose network without CORS.
+      - CORTEX_API_URL=http://cortex:${CORTEX_API_PORT:-4141}
+    ports:
+      # See the cortex service above for why IPv4-only localhost binds
+      # don't work on Docker Desktop for Windows.
+      - "${CORTEX_DASHBOARD_PORT:-3030}:3030"
+    depends_on:
+      - cortex
     restart: unless-stopped
 
   pgvector:
@@ -55,7 +103,7 @@ services:
     volumes:
       - pgvector-data:/var/lib/postgresql/data
     ports:
-      - "${PGVECTOR_PORT:-5432}:5432"
+      - "127.0.0.1:${PGVECTOR_PORT:-5432}:5432"
     restart: unless-stopped
 
   ollama:
@@ -64,8 +112,8 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    # GPU passthrough: uncomment on a Linux host with nvidia-container-toolkit.
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    # GPU passthrough on a Linux host with nvidia-container-toolkit:
     # deploy:
     #   resources:
     #     reservations:
@@ -76,6 +124,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  cortex-state:
   pgvector-data:
   ollama-models:

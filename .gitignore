@@ -28,6 +28,9 @@ config/local/**
 # Per-user runtime state (approvals, heartbeat, personal Engram data dir)
 .cortex/
 
+# Default Docker bind-mount target when CORTEX_HOME_HOST is unset
+.cortex-data/
+
 # Wizard backups
 **/*.bak.*
 

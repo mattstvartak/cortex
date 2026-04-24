@@ -1,26 +1,27 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for @onenomad/cortex.
 #
-# Stage 1 (deps): install full workspace with pnpm. We build from the
-#   monorepo root so the workspace links (@cortex/*) resolve.
-# Stage 2 (build): run tsc --build across the workspace.
-# Stage 3 (runtime): copy compiled dist + pruned prod node_modules into
-#   a clean image. Exposes 4040 (webhook receiver) and 3100 (optional HTTP
-#   MCP transport — unused when CORTEX_MCP_TRANSPORT=stdio, which is the
-#   default).
+# Base image is node:20-slim (Debian/glibc). Alpine/musl was tried
+# first but LanceDB's musl binary hard-requires AVX-512 CPU
+# instructions that most consumer laptops lack — the glibc build
+# does runtime CPU detection and works on a broader baseline.
+#
+# Stage 1 (deps): install the workspace with pnpm so the @onenomad/*
+#   links resolve through the monorepo root.
+# Stage 2 (build): tsc --build across the workspace.
+# Stage 3 (runtime): prune to a self-contained deploy of the server
+#   package plus its engram/persona npm dependencies.
 #
 # Build from the repo root:
 #   docker build -f packages/server/Dockerfile -t cortex:latest .
 
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
-# Copy workspace manifest + all package manifests for an install-only pass.
-# This is cached until any package.json changes — subsequent source edits
-# skip the heavy install step.
+# Manifest-only pass: cacheable against package.json churn.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
@@ -29,28 +30,44 @@ FROM deps AS build
 WORKDIR /app
 RUN pnpm -r run build
 
-FROM node:20-alpine AS runtime
+FROM node:20-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+# `git` powers `cortex module install <git-url>` — the dashboard route
+# and the CLI both call `git clone` against the runtime image. ~5MB.
+# `ca-certificates` is implicit in node:20-slim; no need to add.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
-# Copy everything from the build stage. We prune dev deps as a separate
-# step so pnpm can walk the workspace graph correctly.
+# Copy everything from build, then produce a pruned deploy tree for the
+# server package — this strips dev deps and flattens workspace symlinks.
 COPY --from=build /app /app
 RUN pnpm -r --prod deploy --filter=@onenomad/cortex /runtime-pkg
-# Drop the raw workspace — /runtime-pkg is the self-contained deploy.
 
 WORKDIR /runtime-pkg
 
-# Default config path. Mount `./config` from the host (or a volume) here.
-ENV CORTEX_CONFIG_PATH=/config/cortex.yaml
-ENV CORTEX_MCP_TRANSPORT=stdio
+# Default runtime knobs. Compose overrides most of these.
+#
+# CORTEX_DASHBOARD_AUTOSTART=false: the dashboard is its own container
+# in the compose topology, so the server must not also spawn it.
+ENV CORTEX_MCP_TRANSPORT=http
+ENV CORTEX_MCP_HOST=0.0.0.0
+ENV CORTEX_MCP_PORT=3100
+ENV CORTEX_API_HOST=0.0.0.0
+ENV CORTEX_API_PORT=4141
+ENV CORTEX_DASHBOARD_AUTOSTART=false
+# resolveConfigPath uses os.homedir() (/root here) + .cortex, so the
+# bind mount in docker-compose.yml handles workspace discovery — no
+# extra env var needed.
 
-# Webhook receiver (when enabled in cortex.yaml). Optional HTTP MCP
-# transport on 3100 when CORTEX_MCP_TRANSPORT=http.
-EXPOSE 4040 3100
+# MCP HTTP + API ports. Both are intentionally behind a reverse proxy /
+# Tailscale for remote deployments — do not expose to the open internet
+# without an auth layer in front.
+EXPOSE 3100 4141
 
 ENTRYPOINT ["node", "dist/index.js"]
 CMD ["start"]
