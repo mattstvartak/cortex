@@ -1,8 +1,14 @@
 import { fetchLayoutServer } from "@/lib/api";
+import { AutoRefresh } from "@/components/auto-refresh";
 import {
-  type ResolvedLayout,
-  renderWidget,
-} from "@/widgets/registry";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { type ResolvedLayout, renderWidget } from "@/widgets/registry";
 import { WorkspaceSwitcher } from "@/widgets/workspace-switcher";
 
 export const dynamic = "force-dynamic";
@@ -17,32 +23,40 @@ export default async function Home(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6 flex items-baseline justify-between">
+    <div className="space-y-6">
+      <AutoRefresh intervalMs={15_000} />
+      <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Cortex</h1>
-          <p className="text-sm text-neutral-500">
-            Your work-knowledge dashboard. Local to this machine.
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Your work-knowledge at a glance. Refreshes every 15s.
           </p>
         </div>
         {layout && (
-          <div className="flex items-baseline gap-3 text-xs text-neutral-500">
+          <div className="flex items-center gap-3">
             <WorkspaceSwitcher
               {...(layout.workspace ? { initialSlug: layout.workspace } : {})}
             />
-            <span>
-              role: <span className="font-medium">{layout.role}</span>
-            </span>
+            <Badge variant="outline" className="font-mono text-[10px] uppercase">
+              {layout.role}
+            </Badge>
           </div>
         )}
       </header>
 
       {error && (
-        <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          Couldn&apos;t reach the Cortex API: {error}. Is{" "}
-          <code>cortex start</code> running with{" "}
-          <code>api.enabled: true</code>?
-        </p>
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="text-sm text-destructive">
+              Couldn&apos;t reach the Cortex API
+            </CardTitle>
+            <CardDescription>{error}</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm">
+            Is <code className="font-mono">cortex</code> running?
+            Try <code className="font-mono">docker compose ps</code>.
+          </CardContent>
+        </Card>
       )}
 
       {layout && (
@@ -52,6 +66,6 @@ export default async function Home(): Promise<React.JSX.Element> {
           ))}
         </div>
       )}
-    </main>
+    </div>
   );
 }

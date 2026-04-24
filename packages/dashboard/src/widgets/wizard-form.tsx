@@ -71,9 +71,23 @@ interface DiscoveryResult {
 export function WizardForm({
   wizardId,
   onSuccess,
+  defaults,
+  configuredSecrets,
 }: {
   wizardId: string;
   onSuccess?: (result: WizardSubmitResult) => void;
+  /**
+   * Current-value defaults for reconfigure flows. Overrides each step's
+   * declared defaultValue when the key is present. Passed from pages
+   * that fetch the persisted config first (e.g. /adapters/[id]).
+   */
+  defaults?: Record<string, unknown>;
+  /**
+   * List of env-var names that are already set in .env. Used to render
+   * "already set" indicators on secret fields; empty values submitted
+   * leave the existing env alone.
+   */
+  configuredSecrets?: readonly string[];
 }): React.JSX.Element {
   const [spec, setSpec] = useState<WizardSpec | undefined>();
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -153,10 +167,17 @@ export function WizardForm({
         const body = (await res.json()) as WizardSpec;
         if (cancelled) return;
         setSpec(body);
-        // Seed defaults so untouched fields submit correctly.
+        // Seed defaults so untouched fields submit correctly. The
+        // `defaults` prop (reconfigure flow) takes precedence over the
+        // step's declared default.
         const seeds: Record<string, unknown> = {};
         for (const step of body.steps) {
           if (step.defaultValue !== undefined) seeds[step.key] = step.defaultValue;
+        }
+        if (defaults) {
+          for (const [k, v] of Object.entries(defaults)) {
+            if (v !== undefined && v !== null) seeds[k] = v;
+          }
         }
         setValues(seeds);
       } catch (e) {
@@ -168,6 +189,9 @@ export function WizardForm({
     return () => {
       cancelled = true;
     };
+    // `defaults` is intentionally excluded — changing it mid-edit would
+    // blow away the user's in-progress work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardId]);
 
   async function submit(): Promise<void> {
@@ -189,10 +213,16 @@ export function WizardForm({
             .filter((s) => s.length > 0);
         }
       }
+      // Strip empty secret fields before submit so re-save keeps
+      // already-set .env values instead of clobbering them with "".
+      const secretsToSubmit: Record<string, string> = {};
+      for (const [k, v] of Object.entries(secrets)) {
+        if (typeof v === "string" && v.length > 0) secretsToSubmit[k] = v;
+      }
       const res = await fetch(`/api/cortex/wizards/${spec.id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ config: payload, secrets }),
+        body: JSON.stringify({ config: payload, secrets: secretsToSubmit }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -331,6 +361,7 @@ export function WizardForm({
               key={sec.envVar}
               secret={sec}
               value={secrets[sec.envVar] ?? ""}
+              alreadySet={configuredSecrets?.includes(sec.envVar) ?? false}
               onChange={(v) =>
                 setSecrets((prev) => ({ ...prev, [sec.envVar]: v }))
               }
@@ -479,26 +510,39 @@ function FieldForStep({
 function SecretField({
   secret,
   value,
+  alreadySet,
   onChange,
 }: {
   secret: WizardSecret;
   value: string;
+  alreadySet: boolean;
   onChange: (v: string) => void;
 }): React.JSX.Element {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium">
+      <label className="mb-1 flex items-center gap-2 text-sm font-medium">
         {secret.prompt}
-        {secret.required && <span className="ml-1 text-red-600">*</span>}
+        {secret.required && <span className="text-red-600">*</span>}
+        {alreadySet && (
+          <span className="rounded-sm bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
+            set
+          </span>
+        )}
       </label>
       <input
         type={secret.type === "password" ? "password" : "text"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={alreadySet ? "Leave blank to keep existing value" : ""}
         className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
       />
       <p className="mt-1 text-[11px] text-neutral-500">
         env var: <code className="font-mono">{secret.envVar}</code>
+        {alreadySet && (
+          <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+            · currently set in .env
+          </span>
+        )}
       </p>
     </div>
   );
