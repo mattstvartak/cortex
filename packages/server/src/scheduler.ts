@@ -4,10 +4,13 @@ import type { EngramClient } from "./clients/engram.js";
 import { parseCron, nextFireAfter, type CronSchedule } from "./cron.js";
 import type { HeartbeatWriter } from "./heartbeat.js";
 import { runSync } from "./sync.js";
+import type { LoadedTaxonomy } from "./taxonomy.js";
 
 export interface SchedulerOptions {
   engram: EngramClient;
   llmRouter: LLMRouter;
+  /** Optional — pipelines use this for mention/owner enrichment. */
+  taxonomy?: LoadedTaxonomy;
   logger: Logger;
   /**
    * Optional — when set, sync calls pass this as `since`. In v1 we
@@ -27,6 +30,12 @@ export interface Scheduler {
   register(adapter: SourceAdapter, cronExpr: string | undefined): void;
   start(): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Remove every registered entry. Used by the hot-reload path so a
+   * fresh config doesn't pile new entries on top of the old ones.
+   * Callers should `stop()` first to cancel live timers.
+   */
+  clear(): void;
   /** Number of currently-registered adapter entries. */
   size(): number;
 }
@@ -90,6 +99,7 @@ export function createScheduler(opts: SchedulerOptions): Scheduler {
         engram: opts.engram,
         logger: opts.logger,
         llmRouter: opts.llmRouter,
+        ...(opts.taxonomy ? { taxonomy: opts.taxonomy } : {}),
         opts: {
           ...(sinceIso ? { sinceIso } : {}),
         },
@@ -165,6 +175,13 @@ export function createScheduler(opts: SchedulerOptions): Scheduler {
         entry.timer = undefined;
       }
       opts.logger.info("scheduler.stopped");
+    },
+
+    clear() {
+      for (const entry of entries.values()) {
+        if (entry.timer) clearTimeout(entry.timer);
+      }
+      entries.clear();
     },
 
     size() {

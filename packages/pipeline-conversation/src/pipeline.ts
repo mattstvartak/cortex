@@ -4,10 +4,12 @@ import type {
   MemoryMetadata,
   SourceType,
 } from "@onenomad/cortex-core";
-import type {
-  Pipeline,
-  PipelineContext,
-  PipelineMemory,
+import {
+  extractSignals,
+  type ExtractedSignals,
+  type Pipeline,
+  type PipelineContext,
+  type PipelineMemory,
 } from "@onenomad/cortex-pipeline-core";
 import { parseConversation, serializeConversation } from "./parse.js";
 
@@ -39,6 +41,17 @@ export function createConversationPipeline(
       if (messages.length === 0) return [];
 
       const baseMeta = buildBaseMetadata(input, ctx.traceId);
+      // Run the signal extractor once over the full thread. Result is
+      // merged into every emitted memory so per-day + per-quote slices
+      // inherit the same due_date / urgency / mentions_me / owner.
+      const signals = ctx.llm
+        ? await extractSignals(input.content, ctx, {
+            anchorIso: input.updatedAt.toISOString(),
+            selfAliases: ctx.selfAliases ?? [],
+            ...(ctx.peopleByAlias ? { peopleByAlias: ctx.peopleByAlias } : {}),
+          }).catch(() => ({} as ExtractedSignals))
+        : ({} as ExtractedSignals);
+      applySignals(baseMeta, signals);
       const memories: PipelineMemory[] = [];
 
       // 1. Thread-level memory (always emit).
@@ -89,6 +102,17 @@ export function createConversationPipeline(
       return memories;
     },
   };
+}
+
+/**
+ * Mutate `meta` in place with the extractor's findings. Kept separate
+ * so it can be reused across pipelines — same contract everywhere.
+ */
+function applySignals(meta: MemoryMetadata, signals: ExtractedSignals): void {
+  if (signals.due_date) meta.due_date = signals.due_date;
+  if (signals.urgency) meta.urgency = signals.urgency;
+  if (signals.mentions_me !== undefined) meta.mentions_me = signals.mentions_me;
+  if (signals.owner) meta.owner = signals.owner;
 }
 
 function buildBaseMetadata(

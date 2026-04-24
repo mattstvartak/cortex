@@ -9,12 +9,7 @@ import {
   password,
   select,
 } from "@inquirer/prompts";
-import {
-  openBrowser,
-  sessionLogDir,
-  spawnDetached,
-  waitForHttp,
-} from "./detach.js";
+import { openBrowser } from "./open-browser.js";
 import { findRepoRoot, loadDotEnv } from "./dotenv.js";
 import {
   detectDeps,
@@ -280,8 +275,11 @@ async function stepProviders(): Promise<ProviderChoice[]> {
   const selected = await checkbox({
     message: "Which LLM providers will Cortex use?",
     choices: [
-      { name: "Ollama (local)", value: "ollama", checked: true },
-      { name: "OpenRouter (cloud BYOK)", value: "openrouter" },
+      // OpenRouter is the default: BYOK cloud aggregator, no GPU required,
+      // works on a VPS. Ollama is the opt-in path for users with a GPU
+      // box (the author's original setup) who prefer local inference.
+      { name: "OpenRouter (cloud BYOK)", value: "openrouter", checked: true },
+      { name: "Ollama (local)", value: "ollama" },
     ],
     required: true,
   });
@@ -565,7 +563,7 @@ async function pickSetupMode(args: readonly string[]): Promise<"cli" | "web"> {
         value: "web",
         name: "Web dashboard (recommended)",
         description:
-          "Spawns the dashboard detached and opens your browser. Keeps running after this terminal closes.",
+          "Bootstraps a workspace, then points you at `docker compose up` so the dashboard is a browser away.",
       },
       {
         value: "cli",
@@ -580,84 +578,34 @@ async function pickSetupMode(args: readonly string[]): Promise<"cli" | "web"> {
 }
 
 /**
- * The web setup path. Does the bare minimum in terminal (dep check +
- * workspace name) so the dashboard has somewhere to write, then
- * spawns sidecar + dashboard as detached children and opens the
- * browser to the setup page. Parent exits; children survive the
- * terminal closing.
+ * The web setup path. Writes a minimal bootstrap workspace so the
+ * dashboard has somewhere to land, then hands off to `docker compose
+ * up` (or `cortex up`). The browser finishes setup in the dashboard's
+ * /setup page — wizards, secrets, and adapter wiring all live there.
+ *
+ * We don't spawn anything ourselves: long-running detached processes
+ * on Windows were a pit of console-job / PowerShell pain, and Docker
+ * is a cleaner way to keep Cortex alive across terminals.
  */
 async function runWebSetup(repoRoot: string): Promise<number> {
-  // 1. Dependency check stays in terminal — the web UI can't run
-  //    `npm install -g` for the user.
   await stepDependencies();
-
-  // 2. Workspace — one-question prompt. Everything else moves to web.
   const writeRoot = await stepWorkspace(repoRoot);
-
-  // 3. Write a minimum viable cortex.yaml if the workspace doesn't
-  //    already have one. The sidecar needs SOMETHING to parse, and
-  //    the web setup page will fill in providers + adapters.
   await ensureBootstrapConfig(writeRoot);
 
-  // 4. Spawn sidecar + dashboard detached.
-  section("Launching dashboard");
-  const sessionDir = sessionLogDir();
-  const sidecarPort = 4141;
-  const dashboardPort = 3030;
+  const dashboardUrl = "http://localhost:3030";
 
-  const bin = process.argv[1] ?? "cortex";
-  const sidecar = await spawnDetached({
-    command: process.execPath,
-    args: [bin, "start"],
-    sessionDir,
-    label: "sidecar",
-    // Force HTTP MCP transport so the server doesn't block on a
-    // closed stdin (the detached child's stdio[0] is /dev/null-
-    // equivalent; stdio MCP would wait for messages forever).
-    env: { CORTEX_MCP_TRANSPORT: "http" },
-  });
-  ok(`sidecar started (pid ${sidecar.pid})`);
-
-  // Wait for the sidecar to respond before launching the dashboard —
-  // saves a blank-page flash if the dashboard boots first.
-  const sidecarUrl = `http://127.0.0.1:${sidecarPort}/health`;
-  const sidecarReady = await waitForHttp(sidecarUrl, { timeoutMs: 15_000 });
-  if (!sidecarReady) {
-    warn(
-      `Sidecar didn't respond at ${sidecarUrl} within 15s. Check logs at ` +
-        `${sidecar.stderrLog}.`,
-    );
-  } else {
-    ok("sidecar health check passed");
-  }
-
-  // The sidecar auto-spawns the Next.js dashboard as a child when
-  // CORTEX_MCP_TRANSPORT=http (which we set above). Just wait for
-  // the dashboard to bind to :3030 and open the browser.
-  const dashboardUrl = `http://localhost:${dashboardPort}`;
-  const dashReady = await waitForHttp(dashboardUrl, { timeoutMs: 45_000 });
-  if (!dashReady) {
-    warn(
-      `Dashboard didn't respond at ${dashboardUrl} within 45s. ` +
-        `Tail ${sidecar.stdoutLog} for progress — Next.js takes a moment on first boot.`,
-    );
-  } else {
-    ok(`dashboard listening at ${dashboardUrl}`);
-  }
+  section("Start Cortex");
+  line("  Run ONE of these in a separate terminal, then come back here:");
+  line("");
+  line("    docker compose up -d       # recommended — always-on, survives reboots");
+  line("    cortex start               # local dev — foreground, ctrl+C to stop");
+  line("");
+  line(`  The dashboard lives at ${dashboardUrl}/setup — finish configuration there.`);
+  line("");
 
   const opened = await openBrowser(`${dashboardUrl}/setup`);
-  if (opened) ok("opened browser");
-  else line(`  (couldn't auto-open — visit ${dashboardUrl}/setup manually)`);
-
-  section("Running in the background");
-  line(`  cortex daemon  pid ${sidecar.pid}`);
-  line(`                  logs ${sidecar.stdoutLog}`);
-  line(`                  (dashboard runs as a child of this process)`);
-  line("");
-  line("  Stop with:  cortex stop");
-  line("  Restart:    cortex restart");
-  line("");
-  line(`  Finish setup at ${dashboardUrl}/setup, then your dashboard is live at ${dashboardUrl}.`);
+  if (opened) ok(`opened ${dashboardUrl}/setup in your browser`);
+  else line(`  (couldn't auto-open — visit ${dashboardUrl}/setup after starting)`);
   line("");
   return 0;
 }
@@ -687,7 +635,10 @@ async function ensureBootstrapConfig(writeRoot: string): Promise<void> {
       "llm:",
       "  providers: {}",
       "  tasks:",
-      "    default: { provider: ollama, model: qwen3:14b }",
+      "    # Placeholder — replaced by the web setup wizard once you pick",
+      "    # a provider. OpenRouter is the recommended default; Ollama is",
+      "    # an opt-in toggle for users with a local GPU box.",
+      "    default: { provider: openrouter, model: \"anthropic/claude-haiku-4.5\" }",
       "",
       "api:",
       "  enabled: true",

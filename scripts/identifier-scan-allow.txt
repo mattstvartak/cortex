@@ -66,3 +66,6 @@ ssh://git@git.example
 github.com/login/device
 github.com/login/oauth/access_token
 docs.github.com/en/apps/oauth-apps
+
+# URL-shape documentation in tool comments (OWNER/REPO placeholders)
+github.com/OWNER/REPO

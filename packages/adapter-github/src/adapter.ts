@@ -121,21 +121,30 @@ export class GithubAdapter extends BaseAdapter {
         "github adapter: no token found. Run `cortex github-login` (device flow, recommended) or set GITHUB_TOKEN in .env.",
       );
     }
+    // `repos` non-empty is required for fetch + probeHealth but NOT for
+    // discoverProjects — the whole point of pre-install discovery is
+    // picking repos the adapter will then sync. Each caller that needs
+    // a non-empty list guards below.
+    this.client = new GithubClient({ token });
+  }
+
+  protected override async probeHealth(): Promise<Record<string, unknown>> {
     if (this.cfg.repos.length === 0) {
       throw new Error(
         "github adapter: `repos` must be non-empty (safer than scanning every repo you can see)",
       );
     }
-    this.client = new GithubClient({ token });
-  }
-
-  protected override async probeHealth(): Promise<Record<string, unknown>> {
     const [owner, repo] = splitRepo(this.cfg.repos[0]!);
     const meta = await this.client.getRepo(owner, repo);
     return { sampleRepo: meta.full_name, defaultBranch: meta.default_branch };
   }
 
   async *fetch(_since?: Date): AsyncIterable<RawSourceItem> {
+    if (this.cfg.repos.length === 0) {
+      throw new Error(
+        "github adapter: `repos` must be non-empty (safer than scanning every repo you can see)",
+      );
+    }
     let remaining =
       this.cfg.maxFilesPerRun > 0 ? this.cfg.maxFilesPerRun : Infinity;
 

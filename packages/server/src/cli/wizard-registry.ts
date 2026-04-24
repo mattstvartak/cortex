@@ -10,6 +10,7 @@ import { linearWizard } from "@onenomad/cortex-adapter-linear";
 import { loomWizard } from "@onenomad/cortex-adapter-loom";
 import { notionWizard } from "@onenomad/cortex-adapter-notion";
 import { obsidianWizard } from "@onenomad/cortex-adapter-obsidian";
+import { outlookWizard } from "@onenomad/cortex-adapter-outlook";
 import { slackWizard } from "@onenomad/cortex-adapter-slack";
 import { pgvectorWizard } from "@onenomad/cortex-memory-pgvector";
 import { ollamaWizard } from "@onenomad/cortex-provider-ollama";
@@ -39,13 +40,16 @@ const WIZARDS: WizardModule[] = [
   loomWizard,
   notionWizard,
   obsidianWizard,
+  outlookWizard,
   slackWizard,
   gmailWizard,
   googleCalendarWizard,
   googleDriveWizard,
-  // llm providers
-  ollamaWizard,
+  // llm providers — OpenRouter first so the dashboard shows it as the
+  // default pick (BYOK cloud, no GPU required). Ollama stays for users
+  // who have a local GPU box.
   openrouterWizard,
+  ollamaWizard,
   // memory backends
   pgvectorWizard,
   // webhooks

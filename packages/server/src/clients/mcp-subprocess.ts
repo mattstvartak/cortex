@@ -83,8 +83,19 @@ export async function callJsonTool<T>(
   client: Client,
   name: string,
   args: Record<string, unknown>,
+  opts?: { timeoutMs?: number },
 ): Promise<T> {
-  const result = (await client.callTool({ name, arguments: args })) as {
+  // MCP SDK defaults to 60s; engram.memory_ingest with CPU embeddings
+  // on a non-trivial file can exceed that easily, so callers can pass
+  // a longer timeout. A generous 5-minute cap covers "slow laptop
+  // finishing a long markdown file" without masking real deadlocks.
+  const requestOptions =
+    opts?.timeoutMs !== undefined ? { timeout: opts.timeoutMs } : undefined;
+  const result = (await client.callTool(
+    { name, arguments: args },
+    undefined,
+    requestOptions,
+  )) as {
     isError?: boolean;
     content?: Array<{ type: string; text?: string }>;
   };

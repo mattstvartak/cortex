@@ -121,5 +121,9 @@ export function buildReader(
       if (byEmail) return byEmail;
       return personByName.get(normalizeAlias(query));
     },
+
+    findSelf() {
+      return people.find((p) => p.self === true);
+    },
   };
 }

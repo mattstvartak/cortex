@@ -31,6 +31,7 @@
     { "path": "../adapter-loom" },
     { "path": "../adapter-notion" },
     { "path": "../adapter-obsidian" },
+    { "path": "../adapter-outlook" },
     { "path": "../adapter-slack" }
   ]
 }

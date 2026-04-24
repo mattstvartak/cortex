@@ -4,10 +4,12 @@ import type {
   MemoryMetadata,
   SourceType,
 } from "@onenomad/cortex-core";
-import type {
-  Pipeline,
-  PipelineContext,
-  PipelineMemory,
+import {
+  extractSignals,
+  type ExtractedSignals,
+  type Pipeline,
+  type PipelineContext,
+  type PipelineMemory,
 } from "@onenomad/cortex-pipeline-core";
 import { loadPrompt, renderPrompt } from "./prompts.js";
 import type {
@@ -39,6 +41,15 @@ export function createMeetingPipeline(
     ): Promise<PipelineMemory[]> {
       const memories: PipelineMemory[] = [];
       const baseMeta = buildBaseMetadata(input, ctx.traceId);
+
+      // Extract temporal + attention signals from the transcript
+      // before the multi-pass structural extraction. Runs in parallel
+      // with Pass 1 since neither depends on the other.
+      const signalsPromise = extractSignals(input.content, ctx, {
+        anchorIso: input.updatedAt.toISOString(),
+        selfAliases: ctx.selfAliases ?? [],
+        ...(ctx.peopleByAlias ? { peopleByAlias: ctx.peopleByAlias } : {}),
+      }).catch(() => ({} as ExtractedSignals));
 
       // --- Pass 1: structural ---------------------------------------
       const pass1Tmpl = await loadPrompt("pass1-structural.md");
@@ -85,6 +96,12 @@ export function createMeetingPipeline(
         temperature: 0.2,
         maxTokens: 2048,
       });
+
+      // Wait for the signal extractor (kicked off before Pass 1) and
+      // merge its findings into baseMeta before emission so every
+      // sub-memory inherits them.
+      const signals = await signalsPromise;
+      applySignals(baseMeta, signals);
 
       // --- Emit memories --------------------------------------------
       if (includeBrief) {
@@ -162,6 +179,18 @@ export function createMeetingPipeline(
       return memories;
     },
   };
+}
+
+/**
+ * Merge signal-extractor output into a base metadata object in place.
+ * Same shape as conversation pipeline — shared behavior, pulled out
+ * to keep both pipelines aligned.
+ */
+function applySignals(meta: MemoryMetadata, signals: ExtractedSignals): void {
+  if (signals.due_date) meta.due_date = signals.due_date;
+  if (signals.urgency) meta.urgency = signals.urgency;
+  if (signals.mentions_me !== undefined) meta.mentions_me = signals.mentions_me;
+  if (signals.owner) meta.owner = signals.owner;
 }
 
 function buildBaseMetadata(

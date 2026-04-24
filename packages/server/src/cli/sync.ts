@@ -162,5 +162,6 @@ function emptyTaxonomyReader(): AdapterContext["taxonomy"] {
     findPersonBySlug: () => undefined,
     findPersonByEmail: () => undefined,
     findPerson: () => undefined,
+    findSelf: () => undefined,
   };
 }

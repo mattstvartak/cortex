@@ -15,6 +15,7 @@ import { createAdapter as createLinearAdapter } from "@onenomad/cortex-adapter-l
 import { createAdapter as createLoomAdapter } from "@onenomad/cortex-adapter-loom";
 import { createAdapter as createNotionAdapter } from "@onenomad/cortex-adapter-notion";
 import { createAdapter as createObsidianAdapter } from "@onenomad/cortex-adapter-obsidian";
+import { createAdapter as createOutlookAdapter } from "@onenomad/cortex-adapter-outlook";
 import { createAdapter as createSlackAdapter } from "@onenomad/cortex-adapter-slack";
 import type { CortexConfig } from "../config.js";
 
@@ -35,6 +36,7 @@ const adapterFactories: Record<string, AdapterFactory> = {
   "@onenomad/cortex-adapter-loom": createLoomAdapter,
   "@onenomad/cortex-adapter-notion": createNotionAdapter,
   "@onenomad/cortex-adapter-obsidian": createObsidianAdapter,
+  "@onenomad/cortex-adapter-outlook": createOutlookAdapter,
   "@onenomad/cortex-adapter-slack": createSlackAdapter,
 };
 

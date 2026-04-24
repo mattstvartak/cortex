@@ -1,21 +1,25 @@
-# Written by `cortex init`. Re-run the wizard to regenerate.
+# Committed template — do not put real secrets here. `cortex init`
+# regenerates a user-specific copy at ~/.cortex/workspaces/<slug>/config/
+# which is what your deployment actually reads.
+#
+# Default provider is OpenRouter (one API key covers many models, no local
+# GPU needed). Flip in `cortex init` to use Ollama instead for local-only
+# inference on a GPU box.
 
 llm:
   providers:
-    ollama:
-      package: "@onenomad/cortex-provider-ollama"
+    openrouter:
+      package: "@onenomad/cortex-provider-openrouter"
       enabled: true
       config:
-        host: "${OLLAMA_HOST}"
-        defaultModel: "qwen3:14b"
+        appTitle: "Cortex"
 
   tasks:
-    default:    { provider: ollama, model: "qwen3:14b" }
-    structural: { provider: ollama, model: "qwen3:14b" }
-    synthesis:  { provider: ollama, model: "qwen3:14b" }
-    brief:      { provider: ollama, model: "qwen3:14b" }
-    classify:   { provider: ollama, model: "qwen3:14b" }
-    embed:      { provider: ollama, model: "nomic-embed-text" }
+    default:    { provider: openrouter, model: "anthropic/claude-haiku-4.5" }
+    structural: { provider: openrouter, model: "anthropic/claude-haiku-4.5" }
+    synthesis:  { provider: openrouter, model: "anthropic/claude-haiku-4.5" }
+    brief:      { provider: openrouter, model: "anthropic/claude-haiku-4.5" }
+    classify:   { provider: openrouter, model: "anthropic/claude-haiku-4.5" }
 
   fallbackChain: []
 

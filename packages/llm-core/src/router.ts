@@ -49,11 +49,21 @@ export class LLMRouter {
     if (!cfg.tasks.default) {
       throw new Error("LLMRouter: config.tasks must include a 'default' key.");
     }
+    // Warn-but-don't-crash when a task references an unknown provider.
+    // This happens legitimately in two cases:
+    //   1. A fresh workspace has no providers enabled yet but still
+    //      ships a default task binding so cortex.yaml is schema-valid.
+    //   2. User hot-disables a provider while a task still references it.
+    // Both should boot and surface the mismatch at `complete()` time
+    // with a clear "no usable provider" error, not crash on startup.
     for (const [task, binding] of Object.entries(cfg.tasks)) {
       if (!cfg.providers[binding.provider]) {
-        throw new Error(
-          `LLMRouter: task '${task}' references unknown provider '${binding.provider}'`,
-        );
+        cfg.logger?.warn("LLMRouter: task references unconfigured provider", {
+          task,
+          provider: binding.provider,
+          hint:
+            "enable the provider from /providers or re-bind the task via `llm.tasks` in cortex.yaml",
+        });
       }
     }
   }

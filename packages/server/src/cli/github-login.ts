@@ -5,7 +5,7 @@ import {
   tryReadGithubToken,
   writeGithubToken,
 } from "@onenomad/cortex-github-auth";
-import { openBrowser } from "./detach.js";
+import { openBrowser } from "./open-browser.js";
 
 /**
  * Client ID for the Cortex GitHub OAuth App. Device flow doesn't

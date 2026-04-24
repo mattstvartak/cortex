@@ -7,6 +7,7 @@ import { createConversationPipeline } from "@onenomad/cortex-pipeline-conversati
 import { createDocPipeline } from "@onenomad/cortex-pipeline-doc";
 import { createMeetingPipeline } from "@onenomad/cortex-pipeline-meeting";
 import type { EngramClient } from "./clients/engram.js";
+import type { LoadedTaxonomy } from "./taxonomy.js";
 
 export interface SyncOptions {
   /** ISO 8601 — only fetch items changed after this. */
@@ -62,12 +63,36 @@ export function buildPipelineContext(args: {
   traceId: string;
   signal: AbortSignal;
   llmRouter?: LLMRouter;
+  /**
+   * Active taxonomy. When provided, the pipeline context is enriched
+   * with `selfAliases` + `peopleByAlias` so the signal extractor can
+   * flag `mentions_me` and canonicalize owner references.
+   */
+  taxonomy?: LoadedTaxonomy;
 }): PipelineContext {
-  const { logger, traceId, signal, llmRouter } = args;
+  const { logger, traceId, signal, llmRouter, taxonomy } = args;
+  const selfAliases: string[] = [];
+  const peopleByAlias = new Map<string, string>();
+  if (taxonomy) {
+    const self = taxonomy.findSelf();
+    if (self) {
+      selfAliases.push(self.slug, self.name, self.email, ...self.aliases);
+    }
+    for (const p of taxonomy.listPeople()) {
+      peopleByAlias.set(p.slug.toLowerCase(), p.slug);
+      peopleByAlias.set(p.name.toLowerCase(), p.slug);
+      peopleByAlias.set(p.email.toLowerCase(), p.slug);
+      for (const alias of p.aliases) {
+        peopleByAlias.set(alias.toLowerCase(), p.slug);
+      }
+    }
+  }
   return {
     logger,
     signal,
     traceId,
+    ...(selfAliases.length > 0 ? { selfAliases } : {}),
+    ...(peopleByAlias.size > 0 ? { peopleByAlias } : {}),
     llm: {
       async complete(req) {
         if (!llmRouter) {
@@ -132,6 +157,15 @@ export async function processItem(args: {
         out.ingested++;
       }
     }
+    // Emit a per-item success line so the dashboard's sync panel can
+    // show live progress. Quiet at "info" level so it's not noise in
+    // `docker compose logs`, but structured enough for the UI to pick.
+    logger.info("ingest.item_ok", {
+      adapter: adapter.id,
+      sourceId: raw.sourceId,
+      ingested: out.ingested,
+      skipped: out.skipped,
+    });
   } catch (err) {
     out.error = err instanceof Error ? err : new Error(String(err));
     logger.warn("ingest.item_failed", {
@@ -154,9 +188,11 @@ export async function runSync(args: {
   logger: Logger;
   /** Optional — pipelines that need LLM access require this. */
   llmRouter?: LLMRouter;
+  /** Optional — pipelines that want mention/owner enrichment need this. */
+  taxonomy?: LoadedTaxonomy;
   opts?: SyncOptions;
 }): Promise<SyncResult> {
-  const { adapter, engram, logger, llmRouter } = args;
+  const { adapter, engram, logger, llmRouter, taxonomy } = args;
   const opts = args.opts ?? {};
   const limit = opts.limit ?? 0;
 
@@ -184,6 +220,7 @@ export async function runSync(args: {
     traceId,
     signal: new AbortController().signal,
     ...(llmRouter ? { llmRouter } : {}),
+    ...(taxonomy ? { taxonomy } : {}),
   });
 
   for await (const raw of adapter.fetch(since)) {

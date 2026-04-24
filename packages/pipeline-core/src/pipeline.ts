@@ -46,6 +46,18 @@ export interface PipelineContext {
    * end-to-end.
    */
   traceId?: string;
+  /**
+   * Name + slug + aliases for the Cortex user. Populated from the
+   * active workspace's `self: true` person when present, empty
+   * otherwise. The signal extractor uses this to flag `mentions_me`.
+   */
+  selfAliases?: readonly string[];
+  /**
+   * Pre-built lowercase alias → canonical person slug map. Lets the
+   * signal extractor report `owner` as a known slug instead of the
+   * raw phrase the LLM returned.
+   */
+  peopleByAlias?: ReadonlyMap<string, string>;
 }
 
 /**

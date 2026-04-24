@@ -114,7 +114,16 @@ function buildCortexYaml(input: WriteConfigInput): string {
     `    synthesis:  { provider: ${input.defaultTask.provider}, model: "${input.defaultTask.model}" }`,
     `    brief:      { provider: ${input.defaultTask.provider}, model: "${input.defaultTask.model}" }`,
     `    classify:   { provider: ${input.defaultTask.provider}, model: "${input.defaultTask.model}" }`,
-  ].join("\n");
+  ];
+  // Only emit an embed task when an embedding-capable provider is on. Today
+  // that's Ollama. OpenRouter proxies chat completions but not embeddings,
+  // and when memory.primary=engram the embed task isn't called anyway —
+  // Engram handles its own vectorization internally.
+  const ollama = input.providers.find((p) => p.id === "ollama" && p.enabled);
+  if (ollama) {
+    tasks.push(`    embed:      { provider: ollama, model: "nomic-embed-text" }`);
+  }
+  const tasksBlock = tasks.join("\n");
 
   const fallbackIds = input.providers
     .filter((p) => p.enabled && p.id !== input.defaultTask.provider)
@@ -128,8 +137,7 @@ function buildCortexYaml(input: WriteConfigInput): string {
     providerBlocks,
     "",
     "  tasks:",
-    tasks,
-    `    embed:      { provider: ${input.defaultTask.provider}, model: "nomic-embed-text" }`,
+    tasksBlock,
     "",
     `  fallbackChain: [${fallbackIds.join(", ")}]`,
     "",
