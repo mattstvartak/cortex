@@ -100,13 +100,20 @@ function makeItem(overrides: Partial<ClassifiedItem> = {}): ClassifiedItem {
 function makeCtx(
   llmSequence: string[],
 ): PipelineContext & { complete: ReturnType<typeof vi.fn> } {
-  const complete = vi.fn().mockImplementation(async () => {
-    const next = llmSequence.shift();
-    if (next === undefined) {
-      throw new Error("test stub: ran out of LLM responses");
-    }
-    return next;
-  });
+  const complete = vi.fn().mockImplementation(
+    async (args: { task: string }) => {
+      // Signal extractor runs in parallel with pass 1 and consumes an
+      // LLM call — dispatch it to an empty stub so it doesn't steal
+      // responses intended for structural/synthesis/brief. The
+      // pipeline's .catch() swallows the empty shape either way.
+      if (args.task === "classify") return "{}";
+      const next = llmSequence.shift();
+      if (next === undefined) {
+        throw new Error("test stub: ran out of LLM responses");
+      }
+      return next;
+    },
+  );
   return {
     logger: {
       debug: vi.fn(),
@@ -154,10 +161,13 @@ describe("createMeetingPipeline", () => {
       expect(m.metadata.source_id).toMatch(/^loom:rec:xyz#/);
     }
 
-    // LLM called with the right task labels.
-    expect(ctx.complete).toHaveBeenCalledTimes(3);
-    const tasks = ctx.complete.mock.calls.map((c) => c[0].task);
-    expect(tasks).toEqual(["structural", "synthesis", "brief"]);
+    // LLM called with the right task labels. The signal extractor
+    // runs in parallel with pass 1 under task="classify"; filter it
+    // out so the assertion stays focused on the three extraction passes.
+    const extractionTasks = ctx.complete.mock.calls
+      .map((c) => c[0].task)
+      .filter((t: string) => t !== "classify");
+    expect(extractionTasks).toEqual(["structural", "synthesis", "brief"]);
   });
 
   it("respects toggles that drop decision / action_item / chunk outputs", async () => {

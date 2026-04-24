@@ -12,9 +12,10 @@ import {
   type PipelineMemory,
 } from "@onenomad/cortex-pipeline-core";
 import { loadPrompt, renderPrompt } from "./prompts.js";
-import type {
-  MeetingPipelineOptions,
-  MeetingStructured,
+import {
+  meetingStructuredSchema,
+  type MeetingPipelineOptions,
+  type MeetingStructured,
 } from "./types.js";
 
 export function createMeetingPipeline(
@@ -44,12 +45,19 @@ export function createMeetingPipeline(
 
       // Extract temporal + attention signals from the transcript
       // before the multi-pass structural extraction. Runs in parallel
-      // with Pass 1 since neither depends on the other.
+      // with Pass 1 since neither depends on the other. Log on failure
+      // so silent signal loss is visible in the pipeline trace.
       const signalsPromise = extractSignals(input.content, ctx, {
         anchorIso: input.updatedAt.toISOString(),
         selfAliases: ctx.selfAliases ?? [],
         ...(ctx.peopleByAlias ? { peopleByAlias: ctx.peopleByAlias } : {}),
-      }).catch(() => ({} as ExtractedSignals));
+      }).catch((err: unknown) => {
+        ctx.logger.warn("pipeline-meeting.signals.failed", {
+          traceId: ctx.traceId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return {} as ExtractedSignals;
+      });
 
       // --- Pass 1: structural ---------------------------------------
       const pass1Tmpl = await loadPrompt("pass1-structural.md");
@@ -62,7 +70,11 @@ export function createMeetingPipeline(
         temperature: 0,
         maxTokens: 2048,
       });
-      const structured = parseJsonLoose<MeetingStructured>(pass1Raw);
+      const structured = parseAndValidate(
+        pass1Raw,
+        ctx,
+        "pipeline-meeting.pass1.invalid_shape",
+      );
 
       // --- Pass 2: synthesis ----------------------------------------
       const pass2Tmpl = await loadPrompt("pass2-synthesis.md");
@@ -78,7 +90,11 @@ export function createMeetingPipeline(
         temperature: 0,
         maxTokens: 2048,
       });
-      const synthesized = parseJsonLoose<MeetingStructured>(pass2Raw);
+      const synthesized = parseAndValidate(
+        pass2Raw,
+        ctx,
+        "pipeline-meeting.pass2.invalid_shape",
+      );
 
       // --- Pass 3: brief --------------------------------------------
       const pass3Tmpl = await loadPrompt("pass3-brief.md");
@@ -241,6 +257,43 @@ export function splitIntoChunks(text: string, maxChars: number): string[] {
   }
   if (buf.trim().length > 0) out.push(buf.trim());
   return out;
+}
+
+/**
+ * Parse an LLM JSON response + validate against the MeetingStructured
+ * schema. On shape failures, log and return an empty structure so the
+ * rest of the pipeline still produces a brief (downgraded quality,
+ * not a lost meeting). Exported for tests.
+ */
+export function parseAndValidate(
+  raw: string,
+  ctx: PipelineContext,
+  event: string,
+): MeetingStructured {
+  let parsed: unknown;
+  try {
+    parsed = parseJsonLoose<unknown>(raw);
+  } catch (err) {
+    ctx.logger.warn(event, {
+      traceId: ctx.traceId,
+      reason: "json_parse_failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return meetingStructuredSchema.parse({});
+  }
+  const result = meetingStructuredSchema.safeParse(parsed);
+  if (!result.success) {
+    ctx.logger.warn(event, {
+      traceId: ctx.traceId,
+      reason: "schema_failed",
+      issues: result.error.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+      })),
+    });
+    return meetingStructuredSchema.parse({});
+  }
+  return result.data;
 }
 
 /**

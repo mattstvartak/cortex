@@ -1,27 +1,65 @@
+import { z } from "zod";
+
 /**
  * JSON shape that pass 1 must emit and pass 2 preserves. Matches
  * prompts/pass1-structural.md.
+ *
+ * Runtime schema enforces non-null strings and trims empty arrays
+ * coming back from the LLM — pipelines downstream map over these
+ * fields and break on nulls silently.
  */
-export interface MeetingStructured {
-  summary: string;
-  participants: Array<{ name: string; role?: string | null }>;
-  topics: string[];
-  decisions: Array<{
-    statement: string;
-    owner: string | null;
-    rationale: string | null;
-  }>;
-  action_items: Array<{
-    description: string;
-    owner: string | null;
-    due_hint: string | null;
-    /** Added by pass 2. */
-    due_date?: string | null;
-  }>;
-  key_quotes: Array<{ speaker: string; text: string }>;
-  /** Added by pass 2 when a decision contradicts prior state. */
-  conflicts?: Array<{ new_decision: string; contradicts: string }>;
-}
+export const meetingStructuredSchema = z.object({
+  summary: z.string().default(""),
+  participants: z
+    .array(
+      z.object({
+        name: z.string().min(1).default("Unknown"),
+        role: z.string().nullish(),
+      }),
+    )
+    .default([])
+    // Drop participants the LLM sent without a name rather than
+    // ingesting "Unknown" placeholders.
+    .transform((arr) => arr.filter((p) => p.name && p.name !== "Unknown")),
+  topics: z.array(z.string().min(1)).default([]),
+  decisions: z
+    .array(
+      z.object({
+        statement: z.string().min(1),
+        owner: z.string().nullable().default(null),
+        rationale: z.string().nullable().default(null),
+      }),
+    )
+    .default([]),
+  action_items: z
+    .array(
+      z.object({
+        description: z.string().min(1),
+        owner: z.string().nullable().default(null),
+        due_hint: z.string().nullable().default(null),
+        due_date: z.string().nullable().optional(),
+      }),
+    )
+    .default([]),
+  key_quotes: z
+    .array(
+      z.object({
+        speaker: z.string().min(1),
+        text: z.string().min(1),
+      }),
+    )
+    .default([]),
+  conflicts: z
+    .array(
+      z.object({
+        new_decision: z.string().min(1),
+        contradicts: z.string().min(1),
+      }),
+    )
+    .optional(),
+});
+
+export type MeetingStructured = z.infer<typeof meetingStructuredSchema>;
 
 export interface MeetingPipelineOptions {
   /** Max characters per transcript chunk. Keeps memories individually useful. */
