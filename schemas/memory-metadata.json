@@ -25,6 +25,7 @@
     "source": {
       "type": "string",
       "enum": [
+        "manual",
         "loom",
         "google_meet",
         "confluence",
@@ -71,7 +72,8 @@
         "conversation",
         "commit",
         "event",
-        "reference"
+        "reference",
+        "session_handoff"
       ]
     },
     "people": {

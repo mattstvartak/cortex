@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { createCodePipeline } from "@onenomad/cortex-pipeline-code";
 import { createConversationPipeline } from "@onenomad/cortex-pipeline-conversation";
 import { createDocPipeline } from "@onenomad/cortex-pipeline-doc";
-import type {
-  ClassifiedItem,
-  ContentType,
-  MemoryMetadata,
-  SourceType,
+import {
+  memoryMetadataSchema,
+  type ClassifiedItem,
+  type ContentType,
+  type MemoryMetadata,
+  type SourceType,
 } from "@onenomad/cortex-core";
 import { buildPipelineContext } from "../../sync.js";
 import { requireSessionWorkspace } from "../../session-workspace-helpers.js";
@@ -98,6 +99,15 @@ interface Output {
     source_id: string;
     title?: string;
   }>;
+  /**
+   * Per-memory failures from this batch. Empty on full success. A
+   * partial failure returns `ingested` < `memories.length` and the
+   * failing rows here — the caller can retry just those.
+   */
+  errors: Array<{
+    source_id: string;
+    error: string;
+  }>;
 }
 
 /**
@@ -129,6 +139,18 @@ export const ingestContent: McpTool<typeof inputSchema, Output> = {
     const title = input.title || input.sourceId.split("/").pop() || "untitled";
     const traceId = ctx.traceId ?? randomUUID();
 
+    // Reject project slugs that don't exist in the taxonomy — a typo
+    // here silently strands the memory outside any project-filtered
+    // retrieval. Better to fail loud than let the row sink.
+    const projectMatch = ctx.taxonomy.findProject(input.project);
+    if (!projectMatch) {
+      throw new Error(
+        `ingest_content: unknown project '${input.project}'. ` +
+          `Add it via add_project first, or pass an existing slug/alias from list_projects.`,
+      );
+    }
+    const projectSlug = projectMatch.slug;
+
     const contentType = toContentType(input.type);
 
     const classified: ClassifiedItem = {
@@ -142,7 +164,7 @@ export const ingestContent: McpTool<typeof inputSchema, Output> = {
       updatedAt: now,
       authors: input.authors,
       rawMetadata: {},
-      projects: [input.project],
+      projects: [projectSlug],
       confidence: 1,
       classificationMethod: "manual",
     };
@@ -167,6 +189,7 @@ export const ingestContent: McpTool<typeof inputSchema, Output> = {
 
     let ingested = 0;
     const preview: Output["memories"] = [];
+    const errors: Output["errors"] = [];
     for (const mem of memories) {
       // Apply user-supplied tags on top of pipeline tags so they
       // survive the pipeline's own decoration.
@@ -182,37 +205,75 @@ export const ingestContent: McpTool<typeof inputSchema, Output> = {
       // Stamp the session's workspace so retrieval tools can filter
       // this memory back out of other-workspace sessions.
       mem.metadata = { ...mem.metadata, workspace: workspace.slug };
-      await ctx.engram.ingest({
-        content: mem.content,
-        metadata: mem.metadata,
-      });
-      ingested++;
-      preview.push({
-        content_preview: mem.content.slice(0, 160),
-        source_id:
-          typeof mem.metadata.source_id === "string"
-            ? mem.metadata.source_id
-            : input.sourceId,
-        ...(typeof mem.metadata.title === "string"
-          ? { title: mem.metadata.title }
-          : {}),
-      });
+
+      const memSourceId =
+        typeof mem.metadata.source_id === "string"
+          ? mem.metadata.source_id
+          : input.sourceId;
+
+      // Validate the metadata contract at runtime. Pipelines compose
+      // metadata from many sources; a missing required field silently
+      // breaks retrieval filters. Fail loud on a single row but keep
+      // the batch going.
+      const parsed = memoryMetadataSchema.safeParse(mem.metadata);
+      if (!parsed.success) {
+        ctx.logger.warn("ingest_content.metadata_invalid", {
+          sourceId: memSourceId,
+          traceId,
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        });
+        errors.push({
+          source_id: memSourceId,
+          error: `metadata contract violation: ${parsed.error.issues
+            .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+            .join("; ")}`,
+        });
+        continue;
+      }
+
+      try {
+        await ctx.engram.ingest({
+          content: mem.content,
+          metadata: parsed.data,
+        });
+        ingested++;
+        preview.push({
+          content_preview: mem.content.slice(0, 160),
+          source_id: memSourceId,
+          ...(typeof mem.metadata.title === "string"
+            ? { title: mem.metadata.title }
+            : {}),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.logger.error("ingest_content.ingest_failed", {
+          sourceId: memSourceId,
+          traceId,
+          error: msg,
+        });
+        errors.push({ source_id: memSourceId, error: msg });
+      }
     }
 
     ctx.logger.info("ingest_content.done", {
       sourceId: input.sourceId,
-      project: input.project,
+      project: projectSlug,
       type: input.type,
       ingested,
+      failed: errors.length,
       traceId,
     });
 
     return {
       ingested,
       sourceId: input.sourceId,
-      project: input.project,
+      project: projectSlug,
       type: input.type,
       memories: preview,
+      errors,
     };
   },
 };
@@ -235,10 +296,16 @@ function pickPipeline(
     case "meeting":
     case "conversation":
       return createConversationPipeline();
+    // Pass-through: store the content as a single memory without running
+    // a chunking/extraction pipeline. Briefs, decisions, notes, and
+    // action items are already curated by the caller.
     case "note":
     case "decision":
     case "brief":
     case "digest":
+    case "action_item":
+    case "event":
+    case "reference":
       return undefined;
   }
 }

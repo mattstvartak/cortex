@@ -40,6 +40,15 @@ interface Output {
     source_id: string;
     title?: string;
   }>;
+  /**
+   * Per-memory failures from the inner pipeline. Mirrors the
+   * `errors` field on `ingest_content.handler` — forwarded here
+   * so ingest_file callers see the same partial-success picture.
+   */
+  errors: Array<{
+    source_id: string;
+    error: string;
+  }>;
 }
 
 /**
@@ -84,7 +93,7 @@ export const ingestFile: McpTool<typeof inputSchema, Output> = {
         ? [...input.tags, `language:${inferredLanguage}`]
         : input.tags;
 
-    return ingestContent.handler(
+    const inner = await ingestContent.handler(
       {
         content,
         project: input.project,
@@ -100,7 +109,8 @@ export const ingestFile: McpTool<typeof inputSchema, Output> = {
         tags: tagsWithLanguage,
       },
       ctx,
-    ) as Promise<Output>;
+    );
+    return { ...inner, bytes: info.size };
   },
 };
 
