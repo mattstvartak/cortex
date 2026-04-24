@@ -4,16 +4,18 @@ import { filterByWorkspace, type EngramMemory } from "../src/clients/engram.js";
 /**
  * The workspace filter is the only bit of session scoping that actually
  * touches search results. Legacy memories (ingested pre-session-scoping)
- * have no `workspace` tag and MUST remain findable — the cost of hiding
- * them would be a silent regression for anyone who upgrades.
+ * have no `workspace:*` tag and MUST remain findable — the cost of
+ * hiding them would be a silent regression for anyone who upgrades.
+ *
+ * Workspace is encoded as a `workspace:<slug>` tag (not a nested
+ * metadata field) because engram exposes tags on search results but
+ * doesn't model workspace natively.
  */
 function mem(id: string, workspace?: string): EngramMemory {
   return {
     id,
     content: `m-${id}`,
-    ...(workspace !== undefined
-      ? { metadata: { workspace } }
-      : { metadata: {} }),
+    ...(workspace !== undefined ? { tags: [`workspace:${workspace}`] } : {}),
   };
 }
 
@@ -42,24 +44,23 @@ describe("filterByWorkspace", () => {
     expect(out.map((m) => m.id)).toEqual(["1", "2"]);
   });
 
-  it("handles missing metadata object (treats as legacy)", () => {
+  it("handles missing tags array (treats as legacy)", () => {
     const raw: EngramMemory = { id: "bare", content: "x" };
     expect(filterByWorkspace([raw], "any-slug").map((m) => m.id)).toEqual([
       "bare",
     ]);
   });
 
-  it("ignores non-string workspace values (defensive against bad metadata)", () => {
-    const broken: EngramMemory = {
-      id: "bad",
+  it("treats tag array without a workspace:* entry as legacy", () => {
+    const tagged: EngramMemory = {
+      id: "other-tags",
       content: "x",
-      metadata: { workspace: 42 as unknown as string },
+      tags: ["project:foo", "cortex_type:note"],
     };
-    // Non-string workspace is treated as legacy (present but unusable)
-    // rather than thrown out — matches the existing behavior.
-    expect(filterByWorkspace([broken], "anything").map((m) => m.id)).toEqual([
-      "bad",
-    ]);
+    // No workspace:* tag = pre-scoping ingest, keep it.
+    expect(
+      filterByWorkspace([tagged], "anything").map((m) => m.id),
+    ).toEqual(["other-tags"]);
   });
 
   it("returns an empty array when nothing matches", () => {

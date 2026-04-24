@@ -19,22 +19,26 @@ export interface EngramSearchArgs {
   query: string;
   /** Cap on returned memories. */
   limit?: number;
-  /** Project slug filter. Matches the `project` tag in memory metadata. */
+  /** Project slug filter. Matched via a `project:<slug>` tag. */
   project?: string;
-  /** Content-type filter (meeting, decision, doc, etc.). */
+  /**
+   * Cortex content type filter (meeting, decision, action_item, etc.).
+   * Engram's native type enum is narrower (fact/preference/decision/
+   * context/correction), so Cortex types are carried as a `cortex_type:X`
+   * tag and matched via engram's tag filter.
+   */
   type?: string;
-  /** Source filter (loom, confluence, ...). */
+  /** Source filter (loom, confluence, ...). Matched via `source:<x>` tag. */
   source?: string;
-  /** ISO 8601 lower bound on the `date` field. */
+  /** ISO 8601 lower bound on the `date` field. (client-side filter) */
   sinceIso?: string;
   /** Domain to search within. Cortex uses "work". */
   domain?: string;
   /**
-   * Workspace slug filter. Matches the `workspace` tag stamped on
+   * Workspace slug filter. Matches the `workspace:<slug>` tag stamped on
    * memories at ingest. When provided, results with a *different*
-   * workspace are excluded; results WITHOUT a workspace field (pre-
-   * session-scoping ingests) still pass so legacy memories remain
-   * findable.
+   * workspace are excluded; results WITHOUT a workspace tag (pre-session-
+   * scoping ingests) still pass so legacy memories remain findable.
    */
   workspace?: string;
 }
@@ -43,9 +47,16 @@ export interface EngramMemory {
   id: string;
   content: string;
   score?: number;
+  /**
+   * Derived for backward compat with callers that read memory fields via
+   * `metadata.X`. Populated from engram's flat response fields (tags,
+   * source, type, domain, topic). Engram itself has no nested metadata
+   * object — it returns a flat row — so this shape is assembled here.
+   */
   metadata?: Record<string, unknown>;
   createdAt?: string;
   type?: string;
+  tags?: string[];
 }
 
 export interface EngramClient extends EngramAccess {
@@ -55,8 +66,9 @@ export interface EngramClient extends EngramAccess {
 
 /**
  * Workspace-scoped filter applied after Engram returns results. Engram
- * doesn't know about Cortex's `workspace` metadata — so the filter runs
- * client-side here. Memories WITHOUT a workspace field pass through so
+ * doesn't know about Cortex's `workspace` concept — so the filter runs
+ * client-side here. Workspace is encoded as a `workspace:<slug>` tag at
+ * ingest time. Memories WITHOUT any `workspace:*` tag pass through so
  * legacy (pre-session-scoping) ingests remain findable. Exported for
  * tests and re-use.
  */
@@ -66,9 +78,10 @@ export function filterByWorkspace(
 ): EngramMemory[] {
   if (!workspace) return rows;
   return rows.filter((row) => {
-    const meta = (row.metadata ?? {}) as Record<string, unknown>;
-    const w = typeof meta.workspace === "string" ? meta.workspace : undefined;
-    return w === undefined || w === workspace;
+    const tags = row.tags ?? [];
+    const wsTag = tags.find((t) => t.startsWith("workspace:"));
+    if (!wsTag) return true; // no workspace stamp = legacy, keep it
+    return wsTag.slice("workspace:".length) === workspace;
   });
 }
 
@@ -104,51 +117,233 @@ export async function createEngramClient(
   return buildClient(sub, opts.logger);
 }
 
-function buildClient(sub: McpSubprocess, logger: Logger): EngramClient {
+/**
+ * Engram's native type enum is narrow. Cortex carries its richer type
+ * vocabulary (action_item, meeting, brief, etc.) as a `cortex_type:X`
+ * tag plus a mapped engram-native type so retrieval still benefits from
+ * engram's type-aware ranking.
+ */
+function mapCortexTypeToEngram(cortexType: string | undefined): string | undefined {
+  switch (cortexType) {
+    case "decision":
+      return "decision";
+    case undefined:
+    case "":
+      return undefined;
+    // Everything else lands as `context` — engram's closest catch-all —
+    // with the real type preserved in tags. preference/fact/correction
+    // aren't first-class Cortex types today but pass through cleanly.
+    default:
+      return "context";
+  }
+}
+
+/**
+ * Infer importance when the caller doesn't specify one. Pinned to the
+ * type because action items and decisions load-bear daily work and
+ * should survive consolidation longer than raw docs.
+ */
+function inferImportance(cortexType: string | undefined): number {
+  switch (cortexType) {
+    case "action_item":
+      return 0.85;
+    case "decision":
+      return 0.9;
+    case "brief":
+    case "digest":
+      return 0.8;
+    case "meeting":
+    case "conversation":
+      return 0.7;
+    default:
+      return 0.6;
+  }
+}
+
+/**
+ * Build the tag list Cortex encodes onto every ingest. These are what
+ * `my_action_items` and friends read back — since engram's native schema
+ * doesn't carry project/owner/due/status/source_id natively, they ride
+ * as structured tags.
+ */
+function buildCortexTags(
+  metadata: Record<string, unknown>,
+  extra: string[] = [],
+): string[] {
+  const tags: string[] = [];
+  const push = (k: string, v: unknown): void => {
+    if (typeof v === "string" && v.length > 0) tags.push(`${k}:${v}`);
+  };
+
+  push("cortex_type", metadata.type as string | undefined);
+  const project = metadata.project;
+  if (typeof project === "string") {
+    push("project", project);
+  } else if (Array.isArray(project)) {
+    for (const p of project) if (typeof p === "string") push("project", p);
+  }
+  push("workspace", metadata.workspace as string | undefined);
+  push("source", metadata.source as string | undefined);
+  push("source_id", metadata.source_id as string | undefined);
+  push("date", metadata.date as string | undefined);
+
+  const existing = Array.isArray(metadata.tags) ? (metadata.tags as unknown[]) : [];
+  for (const t of existing) if (typeof t === "string") tags.push(t);
+  for (const t of extra) tags.push(t);
+
+  return tags;
+}
+
+interface EngramIngestResponse {
+  ingested?: number;
+  duplicate?: boolean;
+  similar?: Array<{ id: string; content: string; score: number }>;
+  memory?: { id?: string };
+}
+
+/**
+ * Wire an EngramClient on top of an already-connected McpSubprocess.
+ * Exported so tests can inject a scripted subprocess (fake `client.callTool`)
+ * without having to spawn the real engram binary.
+ */
+export function buildClient(sub: McpSubprocess, logger: Logger): EngramClient {
   let lastSuccessAt: number | undefined;
 
   return {
     async ingest(input) {
+      // Engram's memory_ingest has a FLAT schema — content/type/tags/
+      // domain/topic/source/importance — no nested metadata field. So we
+      // flatten Cortex's richer metadata into engram's shape here. Cortex-
+      // specific fields (project, workspace, owner, due, etc.) ride as
+      // structured tags so they survive the round-trip.
+      const md = (input.metadata ?? {}) as Record<string, unknown>;
+      const cortexType = typeof md.type === "string" ? md.type : undefined;
+      const engramType = mapCortexTypeToEngram(cortexType);
+      const tags = buildCortexTags(md);
+      const domain = typeof md.domain === "string" && md.domain.length > 0
+        ? md.domain
+        : "work";
+      const topic = typeof md.project === "string"
+        ? md.project
+        : Array.isArray(md.project)
+          ? ((md.project[0] as string | undefined) ?? "")
+          : "";
+      const importance = typeof md.confidence === "number"
+        ? md.confidence
+        : inferImportance(cortexType);
+
+      // Structured types (action items, decisions, briefs) are often
+      // refinements of broader context already stored — engram's 0.75
+      // dedupe would swallow them. Skip dedupe for types the caller
+      // owns the uniqueness of via source_id.
+      const skipDedupe = cortexType !== undefined && cortexType !== "doc" && cortexType !== "code";
+
+      const payload: Record<string, unknown> = {
+        content: input.content,
+        ...(engramType ? { type: engramType } : {}),
+        ...(tags.length > 0 ? { tags: tags.join(",") } : {}),
+        ...(domain ? { domain } : {}),
+        ...(topic ? { topic } : {}),
+        ...(typeof md.source_id === "string" ? { source: md.source_id } : {}),
+        importance,
+        ...(skipDedupe ? { skipDedupe: true } : {}),
+      };
+
       // 5-minute timeout: CPU embeddings + LanceDB write on large files
       // can exceed the SDK's 60s default. Real deadlocks still surface,
       // just after a longer grace period.
-      const res = await callJsonTool<{ id?: string } | string>(
+      const res = await callJsonTool<EngramIngestResponse>(
         sub.client,
         "memory_ingest",
-        {
-          content: input.content,
-          metadata: input.metadata,
-        },
+        payload,
         { timeoutMs: 300_000 },
       );
       lastSuccessAt = Date.now();
-      const id =
-        typeof res === "object" && res && "id" in res
-          ? (res as { id: string }).id
-          : "";
-      return { id };
+
+      // Engram returns { ingested: number, ... }. Zero means the write
+      // was rejected — almost always a duplicate. Surface that loud
+      // rather than letting ingest_content report fake success.
+      const ingestedCount = typeof res?.ingested === "number" ? res.ingested : 0;
+      if (ingestedCount === 0) {
+        const reason = res?.duplicate
+          ? `duplicate of ${res.similar?.[0]?.id ?? "existing memory"}`
+          : "engram returned ingested=0 with no reason";
+        throw new Error(`engram rejected ingest: ${reason}`);
+      }
+
+      return { id: res?.memory?.id ?? "" };
     },
 
     async search(args) {
+      // Cortex types ride as `cortex_type:X` tags; translate `args.type`
+      // into a tag filter against engram's new exact-tag-match support.
+      const tag = args.type ? `cortex_type:${args.type}` : undefined;
+
       const payload: Record<string, unknown> = {
         query: args.query,
-        limit: args.limit ?? 10,
-        domain: args.domain ?? "work",
+        maxResults: args.limit ?? 10,
+        ...(args.domain ? { domain: args.domain } : { domain: "work" }),
+        ...(tag ? { tag } : {}),
       };
-      const filters: Record<string, unknown> = {};
-      if (args.project) filters.project = args.project;
-      if (args.type) filters.type = args.type;
-      if (args.source) filters.source = args.source;
-      if (args.sinceIso) filters.since = args.sinceIso;
-      if (Object.keys(filters).length > 0) payload.filters = filters;
 
       const res = await callJsonTool<{
+        results?: Array<Record<string, unknown>>;
         memories?: EngramMemory[];
       } | EngramMemory[]>(sub.client, "memory_search", payload);
       lastSuccessAt = Date.now();
 
-      const raw = Array.isArray(res) ? res : (res?.memories ?? []);
-      return filterByWorkspace(raw, args.workspace);
+      const rawRows = Array.isArray(res)
+        ? res
+        : (res?.results ?? res?.memories ?? []);
+
+      const normalized: EngramMemory[] = rawRows.map((row) => {
+        const r = row as Record<string, unknown>;
+        const tags = Array.isArray(r.tags) ? (r.tags as string[]) : [];
+        // Project engram's flat row into Cortex's EngramMemory shape.
+        // `metadata` is assembled from tags + flat fields so callers
+        // that read `mem.metadata.tags` / `mem.metadata.source` keep
+        // working without a downstream refactor.
+        return {
+          id: typeof r.id === "string" ? r.id : "",
+          content: typeof r.content === "string" ? r.content : "",
+          ...(typeof r.score === "number" ? { score: r.score } : {}),
+          ...(typeof r.type === "string" ? { type: r.type } : {}),
+          ...(tags.length > 0 ? { tags } : {}),
+          metadata: {
+            ...(tags.length > 0 ? { tags } : {}),
+            ...(typeof r.source === "string" ? { source: r.source, source_id: r.source } : {}),
+            ...(typeof r.domain === "string" ? { domain: r.domain } : {}),
+            ...(typeof r.topic === "string" ? { project: r.topic } : {}),
+          },
+          ...(typeof r.createdAt === "string" ? { createdAt: r.createdAt } : {}),
+        };
+      });
+
+      // Source + since filters are Cortex-side since engram doesn't
+      // expose them as native filters today.
+      let filtered = normalized;
+      if (args.source) {
+        filtered = filtered.filter((m) => {
+          const meta = (m.metadata ?? {}) as Record<string, unknown>;
+          return meta.source === args.source;
+        });
+      }
+      if (args.project) {
+        filtered = filtered.filter((m) => {
+          const tags = m.tags ?? [];
+          return tags.includes(`project:${args.project}`);
+        });
+      }
+      if (args.sinceIso) {
+        const since = Date.parse(args.sinceIso);
+        filtered = filtered.filter((m) => {
+          if (!m.createdAt) return true;
+          const t = Date.parse(m.createdAt);
+          return Number.isNaN(t) || t >= since;
+        });
+      }
+
+      return filterByWorkspace(filtered, args.workspace);
     },
 
     async healthCheck(): Promise<HealthStatus> {
