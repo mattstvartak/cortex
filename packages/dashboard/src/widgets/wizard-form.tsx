@@ -213,11 +213,28 @@ export function WizardForm({
             .filter((s) => s.length > 0);
         }
       }
+      // Trim leading/trailing whitespace on text + password fields. Users
+      // pasting paths or tokens commonly carry over a stray space; the
+      // adapter then constructs broken filesystem paths or hits "Bearer  ..."
+      // double-spaces and 401s. Trimming at submit time leaves the on-screen
+      // value intact while the user edits, but keeps the persisted config
+      // clean.
+      for (const step of spec.steps) {
+        if (step.type !== "text" && step.type !== "password") continue;
+        const v = payload[step.key];
+        if (typeof v === "string") {
+          payload[step.key] = v.trim();
+        }
+      }
       // Strip empty secret fields before submit so re-save keeps
-      // already-set .env values instead of clobbering them with "".
+      // already-set .env values instead of clobbering them with "". Trim
+      // here too since secrets are pasted (api tokens) more often than
+      // any other field.
       const secretsToSubmit: Record<string, string> = {};
       for (const [k, v] of Object.entries(secrets)) {
-        if (typeof v === "string" && v.length > 0) secretsToSubmit[k] = v;
+        if (typeof v !== "string") continue;
+        const trimmed = v.trim();
+        if (trimmed.length > 0) secretsToSubmit[k] = trimmed;
       }
       const res = await fetch(`/api/cortex/wizards/${spec.id}`, {
         method: "POST",
