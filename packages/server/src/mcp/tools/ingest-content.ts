@@ -19,10 +19,19 @@ const inputSchema = z.object({
     .string()
     .min(1, "content is required — pass the file contents Claude just read"),
   /**
-   * Project slug from config/projects.yaml. Required so the memory
-   * lands in the taxonomy and can be recalled via get_project_context.
+   * Project slug from config/projects.yaml. When omitted, falls back to
+   * the literal "default" project — useful for ad-hoc ingest paths
+   * (file/url/repo from a renderer that doesn't surface a project
+   * picker) that just want the content in the KB without per-project
+   * routing. Phase 1D of the knowledge-engine repositioning will
+   * collapse the project model entirely; this is the first step.
+   *
+   * When a non-default value is provided, it must exist in
+   * config/projects.yaml — a typo there silently strands the memory
+   * outside any project-filtered retrieval, so the validator below
+   * fails loud.
    */
-  project: z.string().min(1),
+  project: z.string().min(1).default("default"),
   /**
    * One of the known content types. Picks the pipeline automatically:
    *   - doc: chunks by heading, one memory per section (default)
@@ -141,15 +150,22 @@ export const ingestContent: McpTool<typeof inputSchema, Output> = {
 
     // Reject project slugs that don't exist in the taxonomy — a typo
     // here silently strands the memory outside any project-filtered
-    // retrieval. Better to fail loud than let the row sink.
-    const projectMatch = ctx.taxonomy.findProject(input.project);
-    if (!projectMatch) {
-      throw new Error(
-        `ingest_content: unknown project '${input.project}'. ` +
-          `Add it via add_project first, or pass an existing slug/alias from list_projects.`,
-      );
+    // retrieval. Better to fail loud than let the row sink. The
+    // sentinel "default" slug bypasses the lookup so ad-hoc ingest
+    // paths (Phase 1D step 1) work without a per-project entry.
+    let projectSlug: string;
+    if (input.project === "default") {
+      projectSlug = "default";
+    } else {
+      const projectMatch = ctx.taxonomy.findProject(input.project);
+      if (!projectMatch) {
+        throw new Error(
+          `ingest_content: unknown project '${input.project}'. ` +
+            `Add it via add_project first, pass an existing slug/alias from list_projects, or omit the field to use the "default" project.`,
+        );
+      }
+      projectSlug = projectMatch.slug;
     }
-    const projectSlug = projectMatch.slug;
 
     const contentType = toContentType(input.type);
 

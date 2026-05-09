@@ -4,7 +4,9 @@ import type { McpTool } from "../tool.js";
 
 const inputSchema = z.object({
   url: z.string().url(),
-  project: z.string().min(1),
+  /** Project slug. Optional — defaults to the sentinel "default" project,
+   *  the same Phase 1D-friendly fallback that ingest_content uses. */
+  project: z.string().min(1).default("default"),
   /**
    * Page title override (single-page mode only — when crawling, each
    * page uses its own <title>). Falls back to the parsed <title> or

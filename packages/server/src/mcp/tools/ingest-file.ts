@@ -6,7 +6,9 @@ import type { McpTool } from "../tool.js";
 
 const inputSchema = z.object({
   path: z.string().min(1),
-  project: z.string().min(1),
+  /** Project slug. Optional — defaults to the sentinel "default" project,
+   *  the same Phase 1D-friendly fallback that ingest_content uses. */
+  project: z.string().min(1).default("default"),
   /**
    * Optional override. When omitted, `type` is inferred from the file
    * extension (see EXT_TO_TYPE below).
