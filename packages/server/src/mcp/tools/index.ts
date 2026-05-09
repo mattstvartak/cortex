@@ -14,6 +14,7 @@ import { ingestRepo } from "./ingest-repo.js";
 import { ingestUrl } from "./ingest-url.js";
 import { kbDossier } from "./kb-dossier.js";
 import { kbSearch } from "./kb-search.js";
+import { kbStats } from "./kb-stats.js";
 import { listProjects } from "./list-projects.js";
 import { listUnclassified } from "./list-unclassified.js";
 import { listWorkspacesTool } from "./list-workspaces.js";
@@ -57,6 +58,7 @@ export const ALL_TOOLS: AnyMcpTool[] = [
   // back-compat with any pre-0.3 consumer that calls them by name.
   kbSearch,
   kbDossier,
+  kbStats,
   listProjects,
   getProjectContext,
   research,
