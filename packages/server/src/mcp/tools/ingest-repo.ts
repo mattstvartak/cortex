@@ -17,7 +17,9 @@ const inputSchema = z.object({
    * happens to look like a URL), local-path interpretation wins.
    */
   path: z.string().min(1),
-  project: z.string().min(1),
+  /** Project slug. Optional — defaults to the sentinel "default" project,
+   *  the same Phase 1D-friendly fallback that ingest_content uses. */
+  project: z.string().min(1).default("default"),
   tags: z.array(z.string()).default([]),
   /**
    * Branch / ref to clone. Only honored for git-URL inputs. Default
