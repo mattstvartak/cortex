@@ -327,6 +327,27 @@ export function createDashboardApi(opts: DashboardApiOptions): DashboardApi {
       return;
     }
 
+    // Wipe-all-memories. Destructive — drops every row from the
+    // memories table. Workspace config, projects, people, secrets are
+    // untouched. Pyre-web's danger-zone button is the intended caller;
+    // a typed-confirm dialog on the UI prevents accidental clicks. Auth
+    // already verified above.
+    if (req.method === "POST" && pathname === "/api/admin/memory/wipe") {
+      try {
+        const result = await opts.engram.wipeAll();
+        logger.warn("api.memory.wiped", { deleted: result.deleted });
+        sendJson(res, 200, { ok: true, deleted: result.deleted });
+      } catch (err) {
+        logger.error("api.memory.wipe_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        sendJson(res, 500, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
+
     // Cold-storage restore. Accepts a gzipped tarball (the output of
     // /api/admin/backup/dump) in the request body, stashes it next to
     // the PGlite data dir, and exits the process. Fly's restart_policy

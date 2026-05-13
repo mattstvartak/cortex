@@ -69,6 +69,12 @@ export interface EngramClient extends EngramAccess {
    * orchestrator uploads it as-is to object storage.
    */
   dumpDataDir?(): Promise<Blob>;
+  /**
+   * Wipe every memory row. Data-only — doesn't touch config, secrets,
+   * or other tables. Used by the destructive 'clean slate' action in
+   * pyre-web's Engram page danger zone.
+   */
+  wipeAll(): Promise<{ deleted: number }>;
 }
 
 /**
@@ -356,6 +362,16 @@ export function buildClient(sub: McpSubprocess, logger: Logger): EngramClient {
 
     async shutdown() {
       await sub.close();
+    },
+
+    async wipeAll() {
+      // Dead path — buildClient is held over from the Engram-MCP-
+      // subprocess era and isn't constructed in Cortex 0.3+. If
+      // something starts using it again, wire to engram's
+      // memory_clear tool (or equivalent) at that time.
+      throw new Error(
+        "wipeAll is not implemented for the legacy Engram subprocess client",
+      );
     },
   };
 }

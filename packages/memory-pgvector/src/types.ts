@@ -85,6 +85,12 @@ export interface MemoryBackend {
    * checks for presence before invoking.
    */
   dumpDataDir?(): Promise<Blob>;
+  /**
+   * Drop every row from the memories table. Indexes are preserved
+   * (the next ingest re-fills them). Workspace config, projects,
+   * people, secrets are untouched — this is data-only.
+   */
+  wipeAll(): Promise<{ deleted: number }>;
 }
 
 /**
