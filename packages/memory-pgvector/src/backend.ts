@@ -296,6 +296,22 @@ export function createPgVectorBackend(
       if (pool.end) await pool.end();
     },
 
+    async wipeAll() {
+      // DELETE over TRUNCATE: works in both PGlite and standard PG,
+      // returns a row-count, and leaves the table + indexes in place
+      // so the next ingest doesn't need to rebuild HNSW from scratch.
+      // For a single-tenant Cortex this is sub-second even at 100k
+      // rows; a TRUNCATE would be faster but PGlite's TRUNCATE doesn't
+      // return a count.
+      const res = await pool.query<{ deleted: string | number }>(
+        `WITH deleted AS (DELETE FROM ${cfg.table} RETURNING 1)
+         SELECT count(*)::text AS deleted FROM deleted`,
+      );
+      const raw = res.rows[0]?.deleted ?? 0;
+      const n = typeof raw === "number" ? raw : Number.parseInt(raw, 10);
+      return { deleted: Number.isFinite(n) ? n : 0 };
+    },
+
     // Embedded-only — delegates to the PGlite pool wrapper. External
     // Postgres pools don't implement this; the resulting `undefined`
     // method on MemoryBackend is what pyre-web's orchestrator probes

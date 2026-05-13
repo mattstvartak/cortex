@@ -174,5 +174,9 @@ function wrapAsEngramClient(
           },
         }
       : {}),
+
+    async wipeAll(): Promise<{ deleted: number }> {
+      return backend.wipeAll();
+    },
   };
 }
