@@ -78,6 +78,20 @@ RUN pnpm -r --prod deploy --filter=@onenomad/cortex /runtime-pkg \
     && rm -rf /app/packages/server/node_modules \
     && mv /runtime-pkg/node_modules /app/packages/server/node_modules
 
+# Next.js standalone output ships server.js + a trimmed node_modules,
+# but it doesn't include /.next/static or /public. The standalone
+# server.js resolves those relative to itself, so they have to land at
+# .../standalone/packages/dashboard/.next/static and /public for the
+# browser's /_next/static/* requests to find them. Without this step
+# every CSS + JS chunk 404s and the dashboard renders unstyled +
+# unhydrated.
+RUN cp -r /app/packages/dashboard/.next/static \
+       /app/packages/dashboard/.next/standalone/packages/dashboard/.next/static \
+    && if [ -d /app/packages/dashboard/public ]; then \
+         cp -r /app/packages/dashboard/public \
+              /app/packages/dashboard/.next/standalone/packages/dashboard/public; \
+       fi
+
 WORKDIR /app/packages/server
 
 # Defaults for Fly Machines. Auth tokens are injected per-tenant by the
