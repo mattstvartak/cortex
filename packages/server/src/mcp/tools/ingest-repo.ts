@@ -35,13 +35,14 @@ const inputSchema = z.object({
   cloneTimeoutMs: z.number().int().positive().default(5 * 60 * 1000),
   /**
    * Run in the background and return a jobId immediately. Default
-   * false (preserves the existing synchronous shape for any pre-
-   * async caller). When true, the response is `{ jobId, queued: true }`
-   * and the caller polls `kb_job_status({ jobId })` for progress +
-   * the eventual result. Useful for repos large enough that the
-   * synchronous path ties up the MCP transport noticeably.
+   * true (the safe default — even small repos can exceed the MCP
+   * transport timeout once embeddings + enrichment land, and the
+   * client polls `kb_job_status({ jobId })` for progress + the
+   * eventual result). Set false ONLY when the caller knows the repo
+   * is small (under ~50 files) and wants the result inline; the sync
+   * shape is kept for that and for backward-compat with older callers.
    */
-  async: z.boolean().default(false),
+  async: z.boolean().default(true),
   /**
    * Per-file size cap. Files larger than this get skipped (recorded in
    * `errors`). Default 256 KiB — enough for almost any source file,
