@@ -50,6 +50,15 @@ export interface SessionState {
    * workspace's .env).
    */
   envBag?: Map<string, string>;
+  /**
+   * Resolved tool surface for this session based on the bearer's
+   * scope claims. `undefined` means no scope token was presented —
+   * the legacy opaque-bearer / gateway-secret / cookie path; the
+   * session sees the full ALL_TOOLS surface (backwards compat with
+   * direct API + dashboard usage). A populated set means the bearer
+   * was a cscope JWT and the session is restricted to those names.
+   */
+  toolAllowList?: Set<string>;
 }
 
 const sessionStates = new Map<string, SessionState>();
@@ -261,6 +270,34 @@ export function getSessionEnvVar(name: string): string | undefined {
 /** Read the workspace for the current ALS-bound session. */
 export function getCurrentWorkspace(): string | null | undefined {
   return getCurrentSessionState()?.workspace;
+}
+
+/**
+ * Stamp the tool allow-list onto a session. Called by the transport's
+ * authOk after verifying a scope-bearing JWT. `undefined` clears the
+ * restriction (legacy opaque bearer or other unscoped credential).
+ */
+export function setSessionToolAllowList(
+  sessionId: string,
+  allowList: Set<string> | undefined,
+): void {
+  const state = sessionStates.get(sessionId);
+  if (!state) {
+    sessionStates.set(sessionId, {
+      workspace: undefined,
+      firstSeenAt: Date.now(),
+      lastSeenAt: Date.now(),
+      ...(allowList ? { toolAllowList: allowList } : {}),
+    });
+    return;
+  }
+  if (allowList) state.toolAllowList = allowList;
+  else delete state.toolAllowList;
+}
+
+/** Tool allow-list for the current ALS-bound session. */
+export function getCurrentToolAllowList(): Set<string> | undefined {
+  return getCurrentSessionState()?.toolAllowList;
 }
 
 /** Count of distinct sessions seen — useful for /api/status. */
