@@ -1,8 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  jobProfileFileSchema,
   peopleFileSchema,
   projectsFileSchema,
+  type JobProfile,
   type Person,
   type Project,
 } from "@onenomad/cortex-core";
@@ -194,5 +196,56 @@ export async function markSelf(
       else if (p.self) p.self = false;
     }
     await writePeople(paths, people);
+  });
+}
+
+function jobProfilePath(paths: TaxonomyPaths): string {
+  return path.join(paths.repoRoot, "config", "job-profile.yaml");
+}
+
+/**
+ * Read the workspace's job profile. Returns `undefined` when the file
+ * is missing or the `profile` key is unset — `get_job_profile`
+ * surfaces this as `configured: false` so the assistant can defer
+ * interrogation until the user brings up something work-related.
+ */
+export async function readJobProfile(
+  paths: TaxonomyPaths,
+): Promise<JobProfile | undefined> {
+  const filePath = await ensureLocalCopy(jobProfilePath(paths));
+  const raw = await readFile(filePath, "utf8").catch(() => "");
+  const parsed = jobProfileFileSchema.parse(parseYaml(raw) ?? {});
+  return parsed.profile;
+}
+
+/**
+ * Upsert the workspace job profile. Patch semantics — only the supplied
+ * fields overwrite; everything else is preserved. Serialized
+ * per-workspace alongside the other taxonomy mutations.
+ */
+export async function upsertJobProfile(
+  paths: TaxonomyPaths,
+  patch: Partial<JobProfile>,
+): Promise<JobProfile> {
+  return runLocked(paths.repoRoot, async () => {
+    const current = (await readJobProfile(paths)) ?? {
+      focusAreas: [],
+      stack: [],
+      directReports: [],
+    };
+    const merged: JobProfile = {
+      ...current,
+      ...patch,
+      focusAreas: patch.focusAreas ?? current.focusAreas,
+      stack: patch.stack ?? current.stack,
+      directReports: patch.directReports ?? current.directReports,
+    };
+    const filePath = await ensureLocalCopy(jobProfilePath(paths));
+    const out = stringifyYaml(
+      { profile: merged },
+      { indent: 2, lineWidth: 0 },
+    );
+    await writeFile(filePath, out, "utf8");
+    return merged;
   });
 }

@@ -16,16 +16,21 @@ import { createScheduler } from "../scheduler.js";
 import { HeartbeatWriter } from "../heartbeat.js";
 import { hotReload, type LiveState } from "../hot-reload.js";
 import { createMemoryClient } from "../clients/memory.js";
-import { createPersonaClient } from "../clients/persona.js";
 import { startStreamWorkers } from "../streams.js";
 import { createWebhookReceiver } from "../webhooks.js";
 import { createDashboardApi } from "../api/server.js";
 import { startDashboardChild } from "../dashboard-child.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { loadTaxonomy } from "../taxonomy.js";
+import { seedSelfFromEnv } from "../cli/seed-self.js";
 import { ALL_TOOLS } from "./tools/index.js";
 import { CORTEX_MCP_INSTRUCTIONS } from "./instructions.js";
 import type { AnyMcpTool, ToolContext } from "./tool.js";
+import {
+  BUILT_IN_MEMORY_TYPES,
+  MemoryTypeRegistry,
+} from "@onenomad/cortex-core";
+import { persistCustomTypes } from "../cli/config-mutation.js";
 import { loadPrivateModules } from "../private-modules.js";
 import { resolveSessionWorkspaceSlug } from "../session-workspace-helpers.js";
 import { TaxonomyCache } from "../taxonomy-cache.js";
@@ -133,6 +138,17 @@ export async function startServer(): Promise<void> {
   logger.info("startup.begin", { configPath });
   const cfg = await loadCortexConfig(configPath);
 
+  // Cortex Cloud seed: when CORTEX_SEED_SELF_* env vars are present,
+  // ensure the active workspace has a `self` person matching the env
+  // identity. Idempotent — re-running on a populated workspace is a
+  // no-op when the user has already taken ownership of the identity
+  // via the MCP tool. See cli/seed-self.ts.
+  await seedSelfFromEnv(logger).catch((err) => {
+    logger.warn("seed_self.failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
   // Rehydrate session→workspace bindings from the last run. Dropping
   // sessions older than 24h keeps the file bounded; anything active
   // in the last day keeps its binding across server restarts.
@@ -149,6 +165,23 @@ export async function startServer(): Promise<void> {
   logger.info("taxonomy.ready", {
     projects: taxonomy.projects.length,
     people: taxonomy.people.length,
+  });
+
+  // Memory-type registry. Seeded from cfg.taxonomy.customTypes, mutates
+  // at ingest time when an unknown type comes in, persists writes back
+  // to the same cortex.yaml so auto-registered types survive a restart.
+  const memoryTypes = new MemoryTypeRegistry({
+    initialCustom: cfg.taxonomy.customTypes,
+    persist: (types) =>
+      persistCustomTypes(configPath, types).catch((err) => {
+        logger.warn("memory_types.persist_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }),
+  });
+  logger.info("memory_types.ready", {
+    builtIn: BUILT_IN_MEMORY_TYPES.length,
+    custom: memoryTypes.customTypes().length,
   });
 
   const { router, providers, hasLocalLlm } = await buildLLMRouter({
@@ -196,12 +229,17 @@ export async function startServer(): Promise<void> {
     healthy: engramHealth.healthy,
   });
 
-  const persona = await createPersonaClient({ logger });
-  const personaHealth = await persona.healthCheck();
-  logger.info("persona.ready", { healthy: personaHealth.healthy });
+  // Cortex 0.3+ is standalone — no subprocess MCP companions. The
+  // Engram and Persona MCP servers no longer run inside the cortex
+  // container. Memory is served directly by the in-process pgvector
+  // client wired above; communication-style adaptation isn't a goal of
+  // this product (it was a hold-over from the personal-assistant
+  // framing dropped in 0.2). See packages/server/src/clients/persona.ts
+  // is retained as dead code only because some types still reference it
+  // from the API server; will fall out in a follow-up cleanup.
 
   const heartbeat = new HeartbeatWriter({ logger });
-  heartbeat.setUpstream(engramHealth.healthy, personaHealth.healthy);
+  heartbeat.setUpstream(engramHealth.healthy);
   await heartbeat.start();
 
   const scheduler = createScheduler({
@@ -356,8 +394,8 @@ export async function startServer(): Promise<void> {
         engram,
         ...(router ? { llmRouter: router } : {}),
         taxonomy,
+        memoryTypes,
         heartbeat,
-        persona,
         adapters: liveState.adapters,
         reload: triggerReload,
         taxonomyCache,
@@ -418,9 +456,9 @@ export async function startServer(): Promise<void> {
 
   const toolContext: ToolContext = {
     taxonomy,
+    memoryTypes,
     logger,
     engram,
-    persona,
     ...(router ? { llmRouter: router } : {}),
     ...(enrichmentQueue ? { enrichmentQueue } : {}),
   };
@@ -498,13 +536,6 @@ export async function startServer(): Promise<void> {
       await engram.shutdown();
     } catch (err) {
       logger.warn("engram.shutdown.error", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    try {
-      await persona.shutdown();
-    } catch (err) {
-      logger.warn("persona.shutdown.error", {
         error: err instanceof Error ? err.message : String(err),
       });
     }
