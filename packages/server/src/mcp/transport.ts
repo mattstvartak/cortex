@@ -4,8 +4,10 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Logger } from "@onenomad/cortex-core";
-import { enterSession, runWithSession } from "../session-context.js";
+import { enterSession, runWithSession, setSessionToolAllowList } from "../session-context.js";
 import { verifyCookie } from "../api/cookie-session.js";
+import { verifyScopeToken } from "../api/scope-token.js";
+import { expandScopes } from "@onenomad/cortex-core";
 
 export interface TransportHandle {
   kind: "stdio" | "http";
@@ -112,6 +114,27 @@ async function connectHttp(
     }
     return diff === 0;
   };
+  /**
+   * Returns the per-request tool allow-list when the bearer is a
+   * scoped JWT (cscope.<payload>.<sig>), or `undefined` for the
+   * full-surface paths (cookie, gateway-secret, legacy opaque bearer).
+   * The caller stamps `undefined` onto the session to mean "no
+   * restriction" and a populated `Set<string>` to constrain
+   * `tools/list` + `tools/call`.
+   */
+  const resolveAllowList = (
+    req: import("node:http").IncomingMessage,
+  ): Set<string> | undefined => {
+    if (!gatewaySecret) return undefined;
+    const authHeader = headerValue(req.headers["authorization"]);
+    if (!authHeader) return undefined;
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+    if (!match) return undefined;
+    const claims = verifyScopeToken(match[1]!.trim(), gatewaySecret);
+    if (!claims) return undefined;
+    return expandScopes(claims.scopes);
+  };
+
   const authOk = (req: import("node:http").IncomingMessage): boolean => {
     if (!authToken && !gatewaySecret) return true;
 
@@ -123,6 +146,19 @@ async function connectHttp(
     if (gatewaySecret) {
       const gw = headerValue(req.headers["x-cortex-gateway-secret"]);
       if (gw && constantTimeEq(gw, gatewaySecret)) return true;
+    }
+
+    // Scoped JWT bearer — verified signature passes auth. The actual
+    // scope enforcement happens at tool-list / tool-call time via the
+    // session's toolAllowList.
+    if (gatewaySecret) {
+      const authHeader = headerValue(req.headers["authorization"]);
+      if (authHeader) {
+        const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+        if (match && verifyScopeToken(match[1]!.trim(), gatewaySecret)) {
+          return true;
+        }
+      }
     }
 
     if (authToken) {
@@ -215,9 +251,16 @@ async function connectHttp(
       res.end("unauthorized");
       return;
     }
+    // Resolve scope claims once per request. The session that picks
+    // up this auth gets stamped with the resulting allow-list (or
+    // cleared when the request used a non-scoped credential, so an
+    // earlier scoped session can't poison a later unscoped one on
+    // the same session id).
+    const allowList = resolveAllowList(req);
     const headerId = headerValue(req.headers["mcp-session-id"]);
     // Existing session — route to the live transport.
     if (headerId && sessions.has(headerId)) {
+      setSessionToolAllowList(headerId, allowList);
       const session = sessions.get(headerId)!;
       runWithSession(headerId, () => {
         void session.transport.handleRequest(req, res).catch((err) => {
@@ -239,6 +282,7 @@ async function connectHttp(
     // by the transport and stashed in `sessions` via
     // onsessioninitialized.
     const tempId = headerId ?? randomUUID();
+    setSessionToolAllowList(tempId, allowList);
     runWithSession(tempId, () => {
       void session.transport.handleRequest(req, res).catch((err) => {
         args.logger.warn("mcp.http.initialize_failed", {

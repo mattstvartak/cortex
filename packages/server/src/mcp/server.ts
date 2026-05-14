@@ -33,6 +33,7 @@ import {
 import { persistCustomTypes } from "../cli/config-mutation.js";
 import { loadPrivateModules } from "../private-modules.js";
 import { resolveSessionWorkspaceSlug } from "../session-workspace-helpers.js";
+import { getCurrentToolAllowList } from "../session-context.js";
 import { TaxonomyCache } from "../taxonomy-cache.js";
 import {
   evictStaleSessions,
@@ -57,13 +58,19 @@ function wireTools(args: {
   const toolsByName = new Map<string, AnyMcpTool>();
   for (const tool of allTools) toolsByName.set(tool.name, tool);
 
-  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: allTools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: zodToJsonSchema(t.inputSchema),
-    })),
-  }));
+  mcp.setRequestHandler(ListToolsRequestSchema, async () => {
+    const allow = getCurrentToolAllowList();
+    const visible = allow
+      ? allTools.filter((t) => allow.has(t.name))
+      : allTools;
+    return {
+      tools: visible.map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: zodToJsonSchema(t.inputSchema),
+      })),
+    };
+  });
 
   mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const tool = toolsByName.get(req.params.name);
@@ -71,6 +78,25 @@ function wireTools(args: {
       return {
         content: [
           { type: "text", text: `Tool '${req.params.name}' not found.` },
+        ],
+        isError: true,
+      };
+    }
+    // Scope enforcement. When the session presented a scoped JWT
+    // that doesn't grant this tool, fail closed with a clear
+    // diagnostic — never silently invoke and never expose an out-of-
+    // scope side effect.
+    const allow = getCurrentToolAllowList();
+    if (allow && !allow.has(tool.name)) {
+      logger.warn("tool.denied_by_scope", { tool: tool.name });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Tool '${tool.name}' is outside your authorized scope. ` +
+              `Contact a workspace admin to widen your access, or sign in ` +
+              `with a higher-scope role.`,
+          },
         ],
         isError: true,
       };

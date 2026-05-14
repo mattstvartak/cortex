@@ -8,5 +8,6 @@ export * from "./memory-types.js";
 export * from "./project.js";
 export * from "./person.js";
 export * from "./job-profile.js";
+export * from "./scopes.js";
 export * from "./trust.js";
 export * from "./wizard.js";
