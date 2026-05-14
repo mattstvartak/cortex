@@ -36,55 +36,46 @@ export interface DocEntry {
 }
 
 /**
- * Curated list of doc files to surface in the dashboard. Order matters —
- * this is the sidebar order. Files not in this list still render at
- * `/docs/<slug>` if the file exists, but they won't appear in the index.
+ * Curated list of doc files surfaced in the dashboard. Order matters —
+ * this is the sidebar order. Audience: end users + enterprise customers
+ * (the ops/admin operating a Cortex install). Internal docs (ROADMAP,
+ * DECISIONS, ADRs, competitive analysis) live in the repo but are not
+ * indexed here.
+ *
+ * Files not in this list still render at `/docs/<slug>` when the
+ * filesystem has them, but they won't appear in the sidebar.
  */
 export const DOC_INDEX: DocEntry[] = [
   {
-    slug: "MCP-STACK",
-    title: "MCP stack",
-    description: "How Cortex, Engram, Persona, and Synapse fit together.",
-  },
-  {
-    slug: "USING",
-    title: "Using Cortex day-to-day",
-    description: "Day-in-the-life walkthrough.",
-  },
-  {
     slug: "SETUP",
     title: "Setup",
-    description: "From-scratch installation and configuration.",
+    description: "First-run setup of a Cortex install.",
   },
   {
     slug: "ARCHITECTURE",
-    title: "Architecture",
-    description: "Internal data plane, pipelines, adapter contract.",
-  },
-  {
-    slug: "DECISIONS",
-    title: "Decisions (ADR log)",
-    description: "Architectural decision records.",
+    title: "How Cortex works",
+    description: "Data plane, pipelines, adapter contract.",
   },
   {
     slug: "DEPLOY",
     title: "Deploy",
-    description: "Operational notes for hosting Cortex.",
+    description: "Putting Cortex on an always-on host.",
   },
   {
     slug: "HOSTING",
     title: "Hosting",
-    description: "Recommended host topologies.",
+    description: "Recommended host topologies and sizing.",
+  },
+  {
+    slug: "enrichment-protocol",
+    title: "Enrichment protocol",
+    description:
+      "How a connected MCP client (Claude, Pyre) can act as Cortex's enrichment provider.",
   },
   {
     slug: "PRIVACY",
     title: "Privacy",
-    description: "PII hygiene rules + the identifier scanner.",
-  },
-  {
-    slug: "ROADMAP",
-    title: "Roadmap",
-    description: "Build order and current state.",
+    description: "PII hygiene rules and the identifier scanner.",
   },
 ];
 

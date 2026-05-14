@@ -38,7 +38,7 @@ interface StatusPayload {
   lastHeartbeatAt?: string;
   uptimeMs?: number;
   mcp?: { connected: boolean; transport: string };
-  upstream?: { engram: boolean; persona: boolean };
+  upstream?: { engram: boolean };
   adapters?: Record<string, AdapterStats>;
 }
 
@@ -143,21 +143,17 @@ export function StatusPanel(): React.JSX.Element {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Upstream MCPs</CardTitle>
+          <CardTitle className="text-base">Memory backend</CardTitle>
           <CardDescription>
-            Engram and Persona run as stdio children inside the cortex
-            container. Health last checked{" "}
+            In-process pgvector store (PGlite for embedded, or external
+            Postgres). Health last checked{" "}
             {fetchedAt ? formatRelative(fetchedAt) : "just now"}.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2">
+        <CardContent>
           <UpstreamRow
-            name="engram"
+            name="memory"
             healthy={status.upstream?.engram === true}
-          />
-          <UpstreamRow
-            name="persona"
-            healthy={status.upstream?.persona === true}
           />
         </CardContent>
       </Card>
@@ -222,8 +218,8 @@ function StatCard({
         <p
           className={cn(
             "mt-1 text-lg font-semibold",
-            tone === "warn" && "text-amber-600 dark:text-amber-400",
-            tone === "ok" && "text-emerald-600 dark:text-emerald-400",
+            tone === "warn" && "text-orange",
+            tone === "ok" && "text-mint",
           )}
         >
           {value}
@@ -244,7 +240,7 @@ function UpstreamRow({
     <div className="flex items-center justify-between rounded-md border p-3">
       <span className="font-mono text-sm">{name}</span>
       {healthy ? (
-        <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 text-sm text-mint">
           <CheckCircle2 className="h-4 w-4" />
           healthy
         </span>

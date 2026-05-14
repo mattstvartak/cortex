@@ -162,15 +162,15 @@ export function GitHubAuthButton({
   // Already authenticated from a prior session? Show a quiet "connected" tag.
   if (phase === "done" && status?.authenticated) {
     return (
-      <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+      <div className="flex items-center gap-2 text-sm text-mint">
         <span
           aria-hidden
-          className="inline-block h-2 w-2 rounded-full bg-emerald-500"
+          className="inline-block h-2 w-2 rounded-full bg-mint"
         />
         <span>
           GitHub connected
           {status.scopes && status.scopes.length > 0 ? (
-            <span className="ml-1 text-xs text-neutral-500">
+            <span className="ml-1 text-xs text-muted-foreground">
               (scopes: {status.scopes.join(", ")})
             </span>
           ) : null}
@@ -182,7 +182,7 @@ export function GitHubAuthButton({
             setStatus(undefined);
             void startAuth();
           }}
-          className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:hover:text-neutral-100"
+          className="text-xs text-muted-foreground underline hover:text-foreground"
         >
           reconnect
         </button>
@@ -201,15 +201,15 @@ export function GitHubAuthButton({
           disabled={phase === "starting"}
           className={
             compact
-              ? "inline-flex items-center gap-2 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-              : "inline-flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              ? "inline-flex items-center gap-2 rounded-md bg-card px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+              : "inline-flex items-center gap-2 rounded-md bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-muted disabled:opacity-50"
           }
         >
           <GithubGlyph />
           {phase === "starting" ? "Starting…" : "Connect to GitHub"}
         </button>
         {error && (
-          <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
+          <p className="mt-2 text-xs text-destructive">{error}</p>
         )}
       </div>
     );
@@ -218,11 +218,11 @@ export function GitHubAuthButton({
   // Waiting for authorization — show code + status.
   if (phase === "waiting" && grant) {
     return (
-      <div className="rounded-md border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
-        <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+      <div className="rounded-md border border-gold/30 bg-gold/10 p-4">
+        <p className="text-sm font-medium text-gold">
           Waiting for GitHub authorization…
         </p>
-        <p className="mt-2 text-sm text-blue-800 dark:text-blue-300">
+        <p className="mt-2 text-sm text-blue-800">
           A new tab opened at{" "}
           <a
             href={grant.verificationUri}
@@ -235,7 +235,7 @@ export function GitHubAuthButton({
           . If nothing happened, click the link. Then enter this code:
         </p>
         <div className="mt-3 flex items-center gap-3">
-          <code className="select-all rounded bg-blue-900/10 px-3 py-1.5 font-mono text-xl font-bold tracking-widest text-blue-900 dark:bg-blue-950/50 dark:text-blue-100">
+          <code className="select-all rounded bg-gold/10 px-3 py-1.5 font-mono text-xl font-bold tracking-widest text-gold">
             {grant.userCode}
           </code>
           <button
@@ -243,12 +243,12 @@ export function GitHubAuthButton({
             onClick={() => {
               void navigator.clipboard.writeText(grant.userCode);
             }}
-            className="text-xs text-blue-700 underline hover:text-blue-900 dark:text-blue-300"
+            className="text-xs text-gold underline hover:text-gold"
           >
             copy
           </button>
         </div>
-        <p className="mt-3 text-xs text-blue-800 dark:text-blue-300">
+        <p className="mt-3 text-xs text-blue-800">
           This page checks every few seconds. Once you approve, it&apos;ll
           update automatically.
         </p>
@@ -295,7 +295,7 @@ function Outcome({
     <div
       className={
         kind === "err"
-          ? "rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+          ? "rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
           : ""
       }
     >

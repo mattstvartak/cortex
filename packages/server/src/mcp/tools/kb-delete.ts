@@ -59,7 +59,7 @@ export const kbDelete: McpTool<typeof inputSchema, Output> = {
         ok: false,
         deleted: 0,
         reason:
-          "engram delete is not available on this release — upgrade @onenomad/engram-memory to a version that exposes memory_delete",
+          "memory delete is not available on this release — the configured memory backend does not implement memory_delete",
       };
     }
     try {

@@ -231,7 +231,7 @@ function StatusBadge({
     return (
       <Badge
         variant="outline"
-        className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+        className="border-mint/40 text-mint"
       >
         <CheckCircle2 className="mr-1 h-3 w-3" />
         ready
@@ -242,7 +242,7 @@ function StatusBadge({
     return (
       <Badge
         variant="outline"
-        className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+        className="border-orange/40 text-orange"
       >
         <AlertTriangle className="mr-1 h-3 w-3" />
         not built
@@ -252,7 +252,7 @@ function StatusBadge({
   return (
     <Badge
       variant="outline"
-      className="border-red-500/40 text-red-600 dark:text-red-400"
+      className="border-destructive/40 text-destructive"
     >
       <XCircle className="mr-1 h-3 w-3" />
       missing
@@ -462,7 +462,7 @@ function InstallDialog({
             <div
               className={`rounded-md border p-3 text-sm ${
                 finalResult.ok
-                  ? "border-emerald-500/40 bg-emerald-500/5"
+                  ? "border-mint/40 bg-mint/5"
                   : "border-destructive/40 bg-destructive/5"
               }`}
             >

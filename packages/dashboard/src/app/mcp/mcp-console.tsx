@@ -267,7 +267,7 @@ export function McpConsole(): React.JSX.Element {
           <Card
             className={cn(
               result.ok
-                ? "border-emerald-500/30 bg-emerald-500/5"
+                ? "border-mint/30 bg-mint/5"
                 : "border-destructive/40 bg-destructive/5",
             )}
           >

@@ -9,11 +9,11 @@ export function PlaceholderWidget({
   name: string;
 }): React.JSX.Element {
   return (
-    <section className="rounded-lg border border-dashed border-neutral-300 bg-white/50 p-4 dark:border-neutral-700 dark:bg-neutral-900/50">
+    <section className="rounded-lg border border-dashed border-border bg-card/50 p-4">
       <h2 className="text-lg font-semibold capitalize">
         {name.replace(/-/g, " ")}
       </h2>
-      <p className="mt-1 text-sm text-neutral-500">
+      <p className="mt-1 text-sm text-muted-foreground">
         Not yet available. This widget is part of a future sprint.
       </p>
     </section>
