@@ -1,6 +1,9 @@
 import type { AnyMcpTool } from "../tool.js";
+import { addPersonTool } from "./add-person.js";
 import { addWorkspaceTool } from "./add-workspace.js";
 import { currentWorkspaceTool } from "./current-workspace.js";
+import { getJobProfileTool } from "./get-job-profile.js";
+import { getUserIdentityTool } from "./get-user-identity.js";
 import { ingestContent } from "./ingest-content.js";
 import { ingestFile } from "./ingest-file.js";
 import { ingestRepo } from "./ingest-repo.js";
@@ -28,6 +31,8 @@ import {
 } from "./session-workspace.js";
 import { submitEnrichmentResult } from "./submit-enrichment-result.js";
 import { switchWorkspaceTool } from "./switch-workspace.js";
+import { updateJobProfileTool } from "./update-job-profile.js";
+import { updateUserIdentityTool } from "./update-user-identity.js";
 
 /**
  * Every MCP tool Cortex advertises. Add new tools here; the server will
@@ -89,6 +94,18 @@ export const ALL_TOOLS: AnyMcpTool[] = [
   currentWorkspaceTool,
   switchWorkspaceTool,
   addWorkspaceTool,
+  // Identity + people taxonomy. Restored 2026-05-13 after the Phase
+  // 1C strip: client MCP instructions (Claude Code's global CLAUDE.md
+  // among others) call these at session start to anchor the
+  // assistant to who the user is. Cortex Cloud seeds the `self`
+  // person on first boot from deployment env vars, so a freshly
+  // provisioned tenant lands with `get_user_identity` already
+  // configured.
+  getUserIdentityTool,
+  updateUserIdentityTool,
+  addPersonTool,
+  getJobProfileTool,
+  updateJobProfileTool,
   // Persistent runtime log surface. Combines the in-memory ring with
   // the on-disk runtime.log so callers (Pyre's Activity tab) get logs
   // that survive Cortex restarts.
