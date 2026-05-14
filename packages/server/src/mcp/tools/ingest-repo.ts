@@ -246,10 +246,10 @@ export const ingestRepo: McpTool<typeof inputSchema, Output> = {
     // (default) so existing callers see no change.
     if (input.async) {
       const job = jobs.create({ kind: "ingest_repo" });
-      void runIngestRepo(input, ctx)
-        .then((result) => jobs.complete(job.id, result))
-        .catch((err) => jobs.fail(job.id, err));
-      jobs.start(job.id);
+      // enqueue() respects the process-wide concurrency cap so two
+      // parallel ingests don't OOM the box. Jobs over the cap sit at
+      // status='queued' until a slot opens.
+      jobs.enqueue(job.id, () => runIngestRepo(input, ctx));
       return {
         // Match the synchronous Output shape's required fields with
         // safe placeholders. Renderers that already handle the sync
