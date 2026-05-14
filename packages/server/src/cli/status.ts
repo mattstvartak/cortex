@@ -25,7 +25,7 @@ export async function runStatus(): Promise<number> {
     `mcp:         ${hb.mcp.connected ? "connected" : "disconnected"} (${hb.mcp.transport})\n`,
   );
   process.stdout.write(
-    `upstream:    engram=${hb.upstream.engram ? "ok" : "down"}  persona=${hb.upstream.persona ? "ok" : "down"}\n`,
+    `memory:      ${hb.upstream.engram ? "ok" : "down"}\n`,
   );
 
   const adapterIds = Object.keys(hb.adapters).sort();

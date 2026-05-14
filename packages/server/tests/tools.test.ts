@@ -10,7 +10,7 @@ import { loadTaxonomy, type LoadedTaxonomy } from "../src/taxonomy.js";
 import { getProjectContext } from "../src/mcp/tools/get-project-context.js";
 import type { ToolContext } from "../src/mcp/tool.js";
 import type { EngramClient, EngramMemory } from "../src/clients/engram.js";
-import type { PersonaClient } from "../src/clients/persona.js";
+import { MemoryTypeRegistry } from "@onenomad/cortex-core";
 
 const fixturesDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -21,15 +21,6 @@ function fakeEngram(memories: EngramMemory[] = []): EngramClient {
   return {
     ingest: vi.fn(async () => ({ id: "fake" })),
     search: vi.fn(async () => memories),
-    healthCheck: vi.fn(async () => ({ healthy: true, message: "" })),
-    shutdown: vi.fn(async () => undefined),
-  };
-}
-
-function fakePersona(): PersonaClient {
-  return {
-    cognitiveLoad: vi.fn(async () => "medium"),
-    signal: vi.fn(async () => undefined),
     healthCheck: vi.fn(async () => ({ healthy: true, message: "" })),
     shutdown: vi.fn(async () => undefined),
   };
@@ -53,9 +44,9 @@ async function makeCtx(
   };
   return {
     taxonomy,
+    memoryTypes: new MemoryTypeRegistry(),
     logger,
     engram: fakeEngram(memories),
-    persona: fakePersona(),
   };
 }
 

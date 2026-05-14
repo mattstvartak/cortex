@@ -13,15 +13,14 @@ export interface DepStatus {
 }
 
 /**
- * Check whether the two upstream MCP dependencies are installed globally.
- * "Installed" just means the bin resolves on PATH; we don't care whether it
- * came from global npm, pnpm, or somewhere else.
+ * Pre-flight dependency probe. Cortex 0.3 went standalone — the Engram
+ * and Persona MCP subprocesses are no longer spawned — so there is
+ * currently nothing to probe. Kept as an extension point: any future
+ * runtime that does require an external companion (e.g. a Synapse
+ * bridge) plugs its probe in here.
  */
 export async function detectDeps(): Promise<DepStatus[]> {
-  return Promise.all([
-    probe("persona-mcp", "@onenomad/persona-mcp"),
-    probe("engram-memory", "@onenomad/engram-memory"),
-  ]);
+  return [];
 }
 
 async function probe(bin: string, pkg: string): Promise<DepStatus> {

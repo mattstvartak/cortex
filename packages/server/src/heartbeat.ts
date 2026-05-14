@@ -26,7 +26,11 @@ export interface Heartbeat {
   lastHeartbeatAt: string;
   uptimeMs: number;
   mcp: { connected: boolean; transport: string };
-  upstream: { engram: boolean; persona: boolean };
+  /** Health of the in-process memory backend. Cortex 0.3+ no longer
+   *  spawns Engram or Persona MCP subprocesses; the field is retained
+   *  in its narrower shape so heartbeat consumers (CLI `cortex status`,
+   *  the dashboard) can probe memory health without breaking. */
+  upstream: { engram: boolean };
   adapters: Record<string, AdapterRunStats>;
 }
 
@@ -71,7 +75,7 @@ export class HeartbeatWriter {
       lastHeartbeatAt: new Date(this.startedAtMs).toISOString(),
       uptimeMs: 0,
       mcp: { connected: false, transport: "stdio" },
-      upstream: { engram: false, persona: false },
+      upstream: { engram: false },
       adapters: {},
     };
   }
@@ -102,8 +106,8 @@ export class HeartbeatWriter {
     this.state.mcp = { connected, transport };
   }
 
-  setUpstream(engram: boolean, persona: boolean): void {
-    this.state.upstream = { engram, persona };
+  setUpstream(engram: boolean): void {
+    this.state.upstream = { engram };
   }
 
   /** Register an adapter with its schedule. Called at startup. */
