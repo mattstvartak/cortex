@@ -261,26 +261,26 @@ export function WizardForm({
     }
   }
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading wizard…</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">Loading wizard…</p>;
   if (error && !spec) {
     return (
-      <p className="text-sm text-red-600 dark:text-red-400">
+      <p className="text-sm text-destructive">
         Couldn&apos;t load wizard: {error}
       </p>
     );
   }
-  if (!spec) return <p className="text-sm text-neutral-500">Missing wizard spec.</p>;
+  if (!spec) return <p className="text-sm text-muted-foreground">Missing wizard spec.</p>;
 
   if (result) {
     return (
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+      <div className="rounded-md border border-mint/40 bg-mint/10 p-3 text-sm text-mint">
         <p className="font-medium">Saved {spec.name}.</p>
         <p className="mt-1">
           Wrote to {result.filesWritten.length} file
           {result.filesWritten.length === 1 ? "" : "s"}.
         </p>
         {result.warning && (
-          <p className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">
+          <p className="mt-2 text-xs text-mint">
             {result.warning}
           </p>
         )}
@@ -297,11 +297,11 @@ export function WizardForm({
         <header>
           <h3 className="text-base font-semibold">{spec.name}</h3>
           {spec.description && (
-            <p className="mt-0.5 text-sm text-neutral-500">{spec.description}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{spec.description}</p>
           )}
         </header>
-        <div className="rounded-md border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
-          <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-200">
+        <div className="rounded-md border border-border bg-muted/30 p-4">
+          <p className="mb-3 text-sm text-foreground">
             Authorize Cortex via GitHub&apos;s device flow. We&apos;ll
             list your repos once you approve.
           </p>
@@ -327,12 +327,12 @@ export function WizardForm({
       <header>
         <h3 className="text-base font-semibold">{spec.name}</h3>
         {spec.description && (
-          <p className="mt-0.5 text-sm text-neutral-500">{spec.description}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{spec.description}</p>
         )}
       </header>
 
       {spec.id === "github" && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+        <div className="rounded-md border border-mint/40 bg-mint/10 px-3 py-2">
           <GitHubAuthButton size="compact" />
         </div>
       )}
@@ -369,8 +369,8 @@ export function WizardForm({
       })}
 
       {spec.id !== "github" && spec.secrets.length > 0 && (
-        <fieldset className="space-y-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
-          <legend className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <fieldset className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+          <legend className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Secrets
           </legend>
           {spec.secrets.map((sec) => (
@@ -384,7 +384,7 @@ export function WizardForm({
               }
             />
           ))}
-          <p className="text-[11px] text-neutral-500">
+          <p className="text-[11px] text-muted-foreground">
             Secrets are written to the active workspace&apos;s{" "}
             <code className="font-mono">.env</code> and never committed.
           </p>
@@ -392,13 +392,13 @@ export function WizardForm({
       )}
 
       {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+        className="rounded-md bg-gold px-4 py-2 text-sm font-medium text-foreground transition hover:bg-gold-bright disabled:opacity-50"
       >
         {submitting ? "Saving…" : `Save ${spec.name}`}
       </button>
@@ -418,11 +418,11 @@ function FieldForStep({
   const label = (
     <label className="mb-1 block text-sm font-medium">
       {step.prompt}
-      {step.required && <span className="ml-1 text-red-600">*</span>}
+      {step.required && <span className="ml-1 text-destructive">*</span>}
     </label>
   );
   const hint = step.description ? (
-    <p className="mt-1 text-xs text-neutral-500">{step.description}</p>
+    <p className="mt-1 text-xs text-muted-foreground">{step.description}</p>
   ) : null;
 
   switch (step.type) {
@@ -436,7 +436,7 @@ function FieldForStep({
             value={typeof value === "string" ? value : ""}
             placeholder={step.placeholder}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+            className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
           />
           {hint}
         </div>
@@ -451,7 +451,7 @@ function FieldForStep({
               onChange={(e) => onChange(e.target.checked)}
             />
             <span className="font-medium">{step.prompt}</span>
-            {step.required && <span className="text-red-600">*</span>}
+            {step.required && <span className="text-destructive">*</span>}
           </label>
           {hint}
         </div>
@@ -463,7 +463,7 @@ function FieldForStep({
           <select
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+            className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
           >
             <option value="">— select —</option>
             {step.choices?.map((c) => (
@@ -495,7 +495,7 @@ function FieldForStep({
             }
             placeholder={step.placeholder ?? "comma-separated"}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+            className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
           />
           {hint}
         </div>
@@ -514,9 +514,9 @@ function FieldForStep({
               }
             }}
             rows={4}
-            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 font-mono text-xs dark:border-neutral-800 dark:bg-neutral-900"
+            className="w-full rounded-md border border-border bg-card px-3 py-1.5 font-mono text-xs"
           />
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Advanced step (type: {step.type}). Enter JSON.
           </p>
         </div>
@@ -539,9 +539,9 @@ function SecretField({
     <div>
       <label className="mb-1 flex items-center gap-2 text-sm font-medium">
         {secret.prompt}
-        {secret.required && <span className="text-red-600">*</span>}
+        {secret.required && <span className="text-destructive">*</span>}
         {alreadySet && (
-          <span className="rounded-sm bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
+          <span className="rounded-sm bg-mint/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-mint">
             set
           </span>
         )}
@@ -551,12 +551,12 @@ function SecretField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={alreadySet ? "Leave blank to keep existing value" : ""}
-        className="w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
       />
-      <p className="mt-1 text-[11px] text-neutral-500">
+      <p className="mt-1 text-[11px] text-muted-foreground">
         env var: <code className="font-mono">{secret.envVar}</code>
         {alreadySet && (
-          <span className="ml-2 text-emerald-700 dark:text-emerald-400">
+          <span className="ml-2 text-mint">
             · currently set in .env
           </span>
         )}
@@ -627,38 +627,38 @@ function GithubReposPicker({
       <div className="mb-1 flex items-baseline justify-between">
         <label className="text-sm font-medium">
           {step.prompt}
-          {step.required && <span className="ml-1 text-red-600">*</span>}
+          {step.required && <span className="ml-1 text-destructive">*</span>}
         </label>
         <button
           type="button"
           onClick={onRefresh}
-          className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:hover:text-neutral-100"
+          className="text-xs text-muted-foreground underline hover:text-foreground"
         >
           {discovering ? "refreshing…" : "refresh"}
         </button>
       </div>
 
       {discovering && !discovery && (
-        <p className="text-sm text-neutral-500">Listing your repos…</p>
+        <p className="text-sm text-muted-foreground">Listing your repos…</p>
       )}
 
       {discovery?.status === "failed" && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="rounded-md border border-orange/40 bg-orange/10 p-2 text-xs text-orange">
           Couldn&apos;t discover repos: {discovery.error ?? "unknown error"}.
           Enter them manually below.
         </div>
       )}
 
       {discovery?.status === "ok" && discovery.candidates.length > 0 && (
-        <div className="rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="mb-2 flex items-center justify-between gap-2 text-xs text-neutral-500">
+        <div className="rounded-md border border-border bg-card p-2">
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
               {selected.size} selected · {discovery.candidates.length} found
             </span>
             <button
               type="button"
               onClick={selectAll}
-              className="underline hover:text-neutral-900 dark:hover:text-neutral-100"
+              className="underline hover:text-foreground"
             >
               select all
             </button>
@@ -673,7 +673,7 @@ function GithubReposPicker({
               return (
                 <label
                   key={fullName}
-                  className="flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                  className="flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-sm hover:bg-muted/30"
                 >
                   <input
                     type="checkbox"
@@ -684,7 +684,7 @@ function GithubReposPicker({
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-mono text-xs">{fullName}</div>
                     {c.description && (
-                      <div className="truncate text-[11px] text-neutral-500">
+                      <div className="truncate text-[11px] text-muted-foreground">
                         {c.description}
                       </div>
                     )}
@@ -697,7 +697,7 @@ function GithubReposPicker({
       )}
 
       {discovery?.status === "ok" && discovery.candidates.length === 0 && (
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted-foreground">
           No repos found. You can still type them manually below.
         </p>
       )}
@@ -707,9 +707,9 @@ function GithubReposPicker({
         value={typeof value === "string" ? value : current.join(", ")}
         placeholder={step.placeholder ?? "owner/repo, comma-separated"}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 font-mono text-xs dark:border-neutral-800 dark:bg-neutral-900"
+        className="mt-2 w-full rounded-md border border-border bg-card px-3 py-1.5 font-mono text-xs"
       />
-      <p className="mt-1 text-[11px] text-neutral-500">
+      <p className="mt-1 text-[11px] text-muted-foreground">
         Raw list is editable if you prefer — any changes override the
         checklist selection.
       </p>

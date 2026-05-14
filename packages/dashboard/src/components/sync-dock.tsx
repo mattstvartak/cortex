@@ -320,7 +320,7 @@ function RunChip({ run }: { run: RunState }): React.JSX.Element {
       className={cn(
         "gap-1.5 font-mono",
         run.done && run.resultError && "border-destructive/40 text-destructive",
-        run.done && !run.resultError && run.errors === 0 && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+        run.done && !run.resultError && run.errors === 0 && "border-mint/40 text-mint",
       )}
     >
       <Icon className={cn("h-3 w-3", !run.done && "animate-spin")} />
@@ -374,7 +374,7 @@ function DockLine({ line }: { line: SyncEvent }): React.JSX.Element {
     line.level === "error" || line.msg.endsWith("failed")
       ? "text-destructive"
       : line.msg === "api.adapter.sync_done" || line.msg === "scheduler.run_done"
-        ? "text-emerald-600 dark:text-emerald-400"
+        ? "text-mint"
         : line.msg === "api.adapter.sync_begin" ||
             line.msg === "scheduler.run_begin"
           ? "text-primary"

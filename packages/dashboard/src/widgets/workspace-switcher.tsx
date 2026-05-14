@@ -97,32 +97,32 @@ export function WorkspaceSwitcher({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="rounded bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-700 transition hover:bg-blue-500/25 dark:text-blue-300"
+        className="rounded bg-gold/100/15 px-2 py-0.5 text-xs font-medium text-gold transition hover:bg-gold/100/25"
       >
         {active ?? "no workspace"}
         <span className="ml-1 text-[10px] opacity-60">▾</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-10 mt-2 w-72 rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="border-b border-neutral-100 px-3 py-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:border-neutral-800">
+        <div className="absolute right-0 top-full z-10 mt-2 w-72 rounded-md border border-border bg-card shadow-lg">
+          <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Workspaces
           </div>
           {loading && (
-            <p className="px-3 py-2 text-xs text-neutral-500">Loading…</p>
+            <p className="px-3 py-2 text-xs text-muted-foreground">Loading…</p>
           )}
           {error && (
-            <p className="px-3 py-2 text-xs text-red-600 dark:text-red-400">
+            <p className="px-3 py-2 text-xs text-destructive">
               {error}
             </p>
           )}
           {warning && (
-            <p className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <p className="border-b border-orange/40 bg-orange/10 px-3 py-2 text-xs text-orange">
               {warning}
             </p>
           )}
           {workspaces && workspaces.length === 0 && (
-            <p className="px-3 py-3 text-xs text-neutral-500">
+            <p className="px-3 py-3 text-xs text-muted-foreground">
               None yet. Run{" "}
               <code className="font-mono">cortex workspace add &lt;slug&gt;</code>{" "}
               in a terminal.
@@ -136,19 +136,19 @@ export function WorkspaceSwitcher({
                     type="button"
                     disabled={ws.active || loading}
                     onClick={() => void switchTo(ws.slug)}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-neutral-50 disabled:cursor-default disabled:bg-transparent dark:hover:bg-neutral-800"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-muted/30 disabled:cursor-default disabled:bg-transparent"
                   >
                     <span
                       className={
                         ws.active
-                          ? "font-medium text-blue-700 dark:text-blue-300"
+                          ? "font-medium text-gold"
                           : ""
                       }
                     >
                       {ws.slug}
                     </span>
                     {ws.active && (
-                      <span className="text-[10px] uppercase text-blue-700 dark:text-blue-300">
+                      <span className="text-[10px] uppercase text-gold">
                         active
                       </span>
                     )}
@@ -157,7 +157,7 @@ export function WorkspaceSwitcher({
               ))}
             </ul>
           )}
-          <div className="border-t border-neutral-100 px-3 py-2 text-[11px] text-neutral-500 dark:border-neutral-800">
+          <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
             Switching flips the state pointer, but{" "}
             <code className="font-mono">cortex start</code> must restart to
             load the new workspace.

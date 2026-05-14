@@ -58,14 +58,14 @@ export function SetupFlow(): React.JSX.Element {
 
   if (error) {
     return (
-      <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+      <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
         Couldn&apos;t reach the Cortex API: {error}. Is{" "}
         <code className="font-mono">cortex start</code> running?
       </p>
     );
   }
   if (!state || !wizards) {
-    return <p className="text-sm text-neutral-500">Loading setup state…</p>;
+    return <p className="text-sm text-muted-foreground">Loading setup state…</p>;
   }
 
   if (!state.workspace) {
@@ -85,11 +85,11 @@ export function SetupFlow(): React.JSX.Element {
       <StateCard state={state} />
 
       {!state.hasLlmProvider && (
-        <section className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-          <h2 className="text-base font-semibold text-amber-900 dark:text-amber-200">
+        <section className="rounded-md border border-orange/40 bg-orange/10 p-4">
+          <h2 className="text-base font-semibold text-orange">
             Step 1 · Pick an LLM provider
           </h2>
-          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+          <p className="mt-1 text-sm text-orange">
             Cortex needs at least one provider enabled before it can
             extract, synthesize, or classify anything. Pick one below.
           </p>
@@ -100,11 +100,11 @@ export function SetupFlow(): React.JSX.Element {
         </section>
       )}
 
-      <section className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <section className="rounded-md border border-border bg-card p-4 shadow-sm">
         <h2 className="text-base font-semibold">
           Step 2 · Enable source adapters
         </h2>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Cortex ingests from these sources. You can enable more later
           — pick whichever you&apos;re ready to wire up now.
         </p>
@@ -116,7 +116,7 @@ export function SetupFlow(): React.JSX.Element {
       </section>
 
       {activeWizard && (
-        <section className="rounded-md border border-blue-200 bg-white p-4 shadow-sm dark:border-blue-900 dark:bg-neutral-900">
+        <section className="rounded-md border border-gold/30 bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-baseline justify-between">
             <h2 className="text-base font-semibold">
               Configure {activeWizard.name}
@@ -124,7 +124,7 @@ export function SetupFlow(): React.JSX.Element {
             <button
               type="button"
               onClick={() => setSelectedWizard(undefined)}
-              className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:hover:text-neutral-200"
+              className="text-xs text-muted-foreground underline hover:text-foreground"
             >
               cancel
             </button>
@@ -148,7 +148,7 @@ export function SetupFlow(): React.JSX.Element {
 
 function StateCard({ state }: { state: SetupState }): React.JSX.Element {
   return (
-    <section className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+    <section className="rounded-md border border-border bg-card p-4 shadow-sm">
       <h2 className="text-base font-semibold">Current state</h2>
       <ul className="mt-2 space-y-1 text-sm">
         <li>
@@ -175,7 +175,7 @@ function Check({ ok }: { ok: boolean }): React.JSX.Element {
   return (
     <span
       className={`mr-2 inline-block h-3 w-3 rounded-full ${
-        ok ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-700"
+        ok ? "bg-mint" : "bg-muted"
       }`}
       aria-hidden
     />
@@ -192,7 +192,7 @@ function WizardPicker({
   onPick: (id: string) => void;
 }): React.JSX.Element {
   if (wizards.length === 0) {
-    return <p className="mt-2 text-sm text-neutral-500">None registered.</p>;
+    return <p className="mt-2 text-sm text-muted-foreground">None registered.</p>;
   }
   return (
     <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -203,17 +203,17 @@ function WizardPicker({
             <button
               type="button"
               onClick={() => onPick(w.id)}
-              className="flex w-full flex-col gap-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-left transition hover:border-blue-400 hover:bg-blue-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+              className="flex w-full flex-col gap-1 rounded-md border border-border bg-card px-3 py-2 text-left transition hover:border-gold/50 hover:bg-gold/10"
             >
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-medium">{w.name}</span>
                 {on && (
-                  <span className="text-[10px] uppercase text-emerald-700 dark:text-emerald-400">
+                  <span className="text-[10px] uppercase text-mint">
                     enabled
                   </span>
                 )}
               </div>
-              <span className="text-xs text-neutral-500">{w.description}</span>
+              <span className="text-xs text-muted-foreground">{w.description}</span>
             </button>
           </li>
         );
@@ -224,18 +224,18 @@ function WizardPicker({
 
 function NoWorkspaceCard(): React.JSX.Element {
   return (
-    <section className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-      <h2 className="text-base font-semibold text-amber-900 dark:text-amber-200">
+    <section className="rounded-md border border-orange/40 bg-orange/10 p-4">
+      <h2 className="text-base font-semibold text-orange">
         No workspace yet
       </h2>
-      <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+      <p className="mt-1 text-sm text-orange">
         Cortex needs a workspace to write config into. Create one from
         the terminal — one question, one keystroke:
       </p>
-      <pre className="mt-3 overflow-x-auto rounded bg-amber-900/10 p-2 font-mono text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+      <pre className="mt-3 overflow-x-auto rounded bg-orange/10 p-2 font-mono text-xs text-orange">
         cortex workspace add main
       </pre>
-      <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+      <p className="mt-2 text-xs text-orange">
         Then refresh this page.
       </p>
     </section>
@@ -244,26 +244,26 @@ function NoWorkspaceCard(): React.JSX.Element {
 
 function DoneCard(): React.JSX.Element {
   return (
-    <section className="rounded-md border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
-      <h2 className="text-base font-semibold text-emerald-900 dark:text-emerald-200">
+    <section className="rounded-md border border-mint/40 bg-mint/10 p-4">
+      <h2 className="text-base font-semibold text-mint">
         Ready to go
       </h2>
-      <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
+      <p className="mt-1 text-sm text-mint">
         Core config is in place. Configure more adapters above or finish
         setup and open the dashboard.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Link
           href="/"
-          className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+          className="inline-flex items-center rounded-md bg-mint px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-mint"
         >
           Finish setup → go to dashboard
         </Link>
-        <span className="text-xs text-emerald-800 dark:text-emerald-300">
+        <span className="text-xs text-mint">
           Keep this tab open and come back any time.
         </span>
       </div>
-      <p className="mt-3 text-xs text-emerald-800 dark:text-emerald-300">
+      <p className="mt-3 text-xs text-mint">
         Heads-up: if <code className="font-mono">cortex start</code> was
         already running, restart it so the new providers + adapters load.
       </p>

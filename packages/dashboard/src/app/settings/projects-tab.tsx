@@ -218,9 +218,9 @@ export function ProjectsTab(): React.JSX.Element {
       </ul>
 
       {dirty && (
-        <div className="sticky bottom-4 flex items-center justify-end gap-2 rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm dark:border-amber-700/50 dark:bg-amber-950/30">
-          <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-          <span className="flex-1 text-amber-900 dark:text-amber-200">
+        <div className="sticky bottom-4 flex items-center justify-end gap-2 rounded-md border border-orange/40/60 bg-orange/10 p-3 text-sm">
+          <AlertTriangle className="h-4 w-4 text-orange" />
+          <span className="flex-1 text-orange">
             Unsaved changes
           </span>
           <Button size="sm" onClick={() => void save()} disabled={saving}>
