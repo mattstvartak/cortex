@@ -37,4 +37,4 @@ OneNomad's Cortex, not a fork that happens to share the name.
 
 ## Permission requests and questions
 
-Email hello@mattstvartak.com or open an issue on this repository.
+Email legal@onenomad.dev or open an issue on this repository.
